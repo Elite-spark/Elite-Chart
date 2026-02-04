@@ -3,112 +3,140 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Elite Spark - Royal Gold</title>
+    <title>Elite Spark - Dark Gold</title>
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
-        body { margin: 0; background-color: #000; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        #chart { width: 100vw; height: 100vh; cursor: crosshair; }
+        /* العودة للخلفية السوداء الصافية */
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #000000; font-family: 'Segoe UI', sans-serif; }
+        #chart { width: 100vw; height: 100vh; z-index: 1; }
         
-        /* العلامة العلوية */
-        .chart-info {
-            position: absolute; top: 15px; left: 15px; z-index: 10;
+        /* تنسيق الهوية البصرية */
+        .brand-container {
+            position: absolute; top: 20px; left: 20px; z-index: 10;
             color: #FFD700; pointer-events: none;
         }
-        .chart-info h1 { margin: 0; font-size: 18px; letter-spacing: 1px; }
-        .chart-info p { margin: 2px 0; font-size: 12px; opacity: 0.8; }
+        .brand-container h1 { margin: 0; font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
+        .brand-container p { margin: 2px 0; font-size: 12px; opacity: 0.8; }
+        .user-logo { width: 45px; height: 45px; margin-top: 8px; border: 0px solid #FFD700; border-radius: 1px; }
 
-        /* أزرار الرسم */
-        .controls {
-            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+        /* العد التنازلي - تحسين الشكل والمكان */
+        #countdown-box {
+            position: absolute; top: 20px; right: 80px; z-index: 10;
+            display: flex; flex-direction: column; align-items: center;
+            background: rgba(20, 20, 20, 0.8); border: 1px solid #FFD700;
+            padding: 5px 12px; border-radius: 8px; min-width: 60px;
+        }
+        #countdown-label { color: #FFD700; font-size: 9px; text-transform: uppercase; margin-bottom: 2px; }
+        #countdown { color: #FFD700; font-weight: bold; font-size: 16px; font-family: 'Courier New', monospace; }
+
+        /* مبدل الفريمات - أسفل الشاشة */
+        .timeframes {
+            position: absolute; bottom: 30px; left: 20px;
             z-index: 20; display: flex; gap: 10px;
         }
-        .btn {
-            background: rgba(255, 215, 0, 0.1); border: 1px solid #FFD700;
-            color: #FFD700; padding: 8px 15px; border-radius: 5px; font-size: 12px;
+        .tf-btn {
+            background: #000; border: 1px solid #FFD700; color: #FFD700;
+            padding: 6px 15px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: 0.3s;
         }
-        .btn:active { background: #FFD700; color: #000; }
+        .tf-btn.active { background: #FFD700; color: #000; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="chart-info">
+    
+    <div id="countdown-box">
+        <div id="countdown-label">Next Candle</div>
+        <div id="countdown">00:00</div>
+    </div>
+    
+    <div class="brand-container">
         <h1>ELITE SPARK</h1>
         <p>XAU/USD - GOLD LIVE</p>
+        <img src="https://i.ibb.co/R4kwHrMc/image.png" class="user-logo" alt="Logo">
     </div>
 
-    <div class="controls">
-        <button class="btn" onclick="addHorizontalLine()">+ خط أفقي</button>
-        <button class="btn" onclick="clearLines()">مسح الرسوم</button>
+    <div class="timeframes">
+        <button class="tf-btn" onclick="changeTf('1m', this)">1M</button>
+        <button class="tf-btn" onclick="changeTf('5m', this)">5M</button>
+        <button class="tf-btn active" onclick="changeTf('15m', this)">15M</button>
     </div>
 
     <div id="chart"></div>
 
     <script>
-        // 1. إعداد الشارت باللون الأسود الملكي
+        let currentInterval = '15m'; // الفريم الافتراضي
+        let countdownTimer;
+
+        // 1. إنشاء الشارت بخلفية سوداء صلبة
         const chart = LightweightCharts.createChart(document.getElementById('chart'), {
-            layout: {
-                background: { color: '#000000' },
-                textColor: '#FFD700', // اللون الذهبي للنصوص
-            },
-            grid: {
-                vertLines: { visible: false }, // إخفاء الشبكة تماماً
-                horzLines: { visible: false },
+            layout: { background: { color: '#000000' }, textColor: '#FFD700' },
+            grid: { vertLines: { visible: false }, horzLines: { visible: false } },
+            crosshair: { 
+                mode: LightweightCharts.CrosshairMode.Normal,
+                vertLine: { color: '#FFD700', labelBackgroundColor: '#000' },
+                horzLine: { color: '#FFD700', labelBackgroundColor: '#000' }
             },
             rightPriceScale: { borderColor: '#FFD700' },
-            timeScale: { borderColor: '#FFD700', timeVisible: true },
-            handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
-            handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
+            timeScale: { borderColor: '#FFD700', timeVisible: true }
         });
 
-        // 2. إعداد الشموع (ذهبي صاعد / أسود هابط بحدود ذهبية)
         const candleSeries = chart.addCandlestickSeries({
-            upColor: '#FFD700',        // جسم ذهبي للصاعد
-            downColor: '#000000',      // جسم أسود للهابط
-            borderVisible: true,
-            wickVisible: true,
-            borderColor: '#FFD700',    // الحدود ذهبية للكل
-            wickColor: '#FFD700',      // الذيول ذهبية للكل
-            borderUpColor: '#FFD700',
-            borderDownColor: '#FFD700',
-            wickUpColor: '#FFD700',
-            wickDownColor: '#FFD700',
+            upColor: '#FFD700', downColor: '#000',
+            borderUpColor: '#FFD700', borderDownColor: '#FFD700',
+            wickUpColor: '#FFD700', wickDownColor: '#FFD700'
         });
 
-        // 3. جلب البيانات من بينانس
-        async function fetchGoldData() {
+        // 2. دالة جلب البيانات وتحديثها
+        async function updateChartData(interval) {
             try {
-                const response = await fetch('https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=30m&limit=150');
+                const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=${interval}&limit=500`);
                 const rawData = await response.json();
                 const data = rawData.map(d => ({
                     time: d[0] / 1000,
-                    open: parseFloat(d[1]),
-                    high: parseFloat(d[2]),
-                    low: parseFloat(d[3]),
-                    close: parseFloat(d[4])
+                    open: parseFloat(d[1]), high: parseFloat(d[2]),
+                    low: parseFloat(d[3]), close: parseFloat(d[4])
                 }));
                 candleSeries.setData(data);
                 chart.timeScale().fitContent();
-            } catch (e) { console.error("Data Error", e); }
+                
+                // إعادة ضبط العد التنازلي بناءً على الفريم الجديد
+                setupCountdown(interval);
+            } catch (e) { console.error("Error fetching data", e); }
         }
 
-        // 4. ميزة إضافة خطوط الرسم (أفقي كمثال)
-        function addHorizontalLine() {
-            const price = chart.priceScale('right').coordinateToPrice(100) || 2040;
-            const line = candleSeries.createPriceLine({
-                price: price,
-                color: '#FFD700',
-                lineWidth: 2,
-                lineStyle: LightweightCharts.LineStyle.Dashed,
-                axisLabelVisible: true,
-                title: 'دعم/مقاومة',
-            });
+        // 3. منطق العد التنازلي الذكي والمربوط بالفريم
+        function setupCountdown(interval) {
+            if (countdownTimer) clearInterval(countdownTimer);
+            
+            const minutes = parseInt(interval); // استخراج الرقم من (1m, 5m, 15m)
+            const intervalMs = minutes * 60 * 1000;
+
+            countdownTimer = setInterval(() => {
+                const now = new Date().getTime();
+                const timePassed = now % intervalMs;
+                const timeLeft = intervalMs - timePassed;
+
+                const m = Math.floor(timeLeft / 60000);
+                const s = Math.floor((timeLeft % 60000) / 1000);
+
+                document.getElementById('countdown').innerText = 
+                    `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            }, 1000);
         }
 
-        function clearLines() {
-            location.reload(); // طريقة سريعة لمسح كل شيء والبدء من جديد
+        // 4. تبديل الفريمات
+        function changeTf(tf, btn) {
+            currentInterval = tf;
+            document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            updateChartData(tf);
         }
 
-        fetchGoldData();
-        window.onresize = () => chart.applyOptions({ width: window.innerWidth, height: window.innerHeight });
+        // البداية
+        updateChartData(currentInterval);
+
+        window.onresize = () => {
+            chart.applyOptions({ width: window.innerWidth, height: window.innerHeight });
+        };
     </script>
 </body>
 </html>
