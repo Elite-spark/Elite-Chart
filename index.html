@@ -2,112 +2,113 @@
 <html lang="ar">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Elite Spark - Live Gold Chart</title>
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Elite Spark - Royal Gold</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
-        body { margin: 0; padding: 0; background-color: #000000; overflow: hidden; }
-        #chart-container { width: 100vw; height: 100vh; position: relative; }
-        .logo-overlay {
-            position: absolute; top: 10px; left: 10px; z-index: 10;
-            color: #FFD700; font-family: Arial, sans-serif; font-weight: bold;
-            font-size: 14px; opacity: 0.7; pointer-events: none;
+        body { margin: 0; background-color: #000; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #chart { width: 100vw; height: 100vh; cursor: crosshair; }
+        
+        /* العلامة العلوية */
+        .chart-info {
+            position: absolute; top: 15px; left: 15px; z-index: 10;
+            color: #FFD700; pointer-events: none;
         }
+        .chart-info h1 { margin: 0; font-size: 18px; letter-spacing: 1px; }
+        .chart-info p { margin: 2px 0; font-size: 12px; opacity: 0.8; }
+
+        /* أزرار الرسم */
+        .controls {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            z-index: 20; display: flex; gap: 10px;
+        }
+        .btn {
+            background: rgba(255, 215, 0, 0.1); border: 1px solid #FFD700;
+            color: #FFD700; padding: 8px 15px; border-radius: 5px; font-size: 12px;
+        }
+        .btn:active { background: #FFD700; color: #000; }
     </style>
 </head>
 <body>
-    <div class="logo-overlay">ELITE SPARK - GOLD LIVE</div>
-    <div id="chart-container"></div>
+    <div class="chart-info">
+        <h1>ELITE SPARK</h1>
+        <p>XAU/USD - GOLD LIVE</p>
+    </div>
+
+    <div class="controls">
+        <button class="btn" onclick="addHorizontalLine()">+ خط أفقي</button>
+        <button class="btn" onclick="clearLines()">مسح الرسوم</button>
+    </div>
+
+    <div id="chart"></div>
 
     <script>
-        // 1. إعداد الشارت الأساسي بتصميم داكن
-        const chart = LightweightCharts.createChart(document.getElementById('chart-container'), {
+        // 1. إعداد الشارت باللون الأسود الملكي
+        const chart = LightweightCharts.createChart(document.getElementById('chart'), {
             layout: {
-                backgroundColor: '#000000',
-                textColor: '#d1d4dc',
-                fontSize: 12,
+                background: { color: '#000000' },
+                textColor: '#FFD700', // اللون الذهبي للنصوص
             },
             grid: {
-                vertLines: { color: '#1f1f1f' },
-                horzLines: { color: '#1f1f1f' },
+                vertLines: { visible: false }, // إخفاء الشبكة تماماً
+                horzLines: { visible: false },
             },
-            crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-            priceScale: { borderColor: '#485c7b' },
-            timeScale: { borderColor: '#485c7b', timeVisible: true, secondsVisible: false },
+            rightPriceScale: { borderColor: '#FFD700' },
+            timeScale: { borderColor: '#FFD700', timeVisible: true },
+            handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
+            handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
         });
 
-        // 2. إضافة سلسلة الشموع اليابانية
+        // 2. إعداد الشموع (ذهبي صاعد / أسود هابط بحدود ذهبية)
         const candleSeries = chart.addCandlestickSeries({
-            upColor: '#00ff88', downColor: '#ff3333',
-            borderUpColor: '#00ff88', borderDownColor: '#ff3333',
-            wickUpColor: '#00ff88', wickDownColor: '#ff3333',
+            upColor: '#FFD700',        // جسم ذهبي للصاعد
+            downColor: '#000000',      // جسم أسود للهابط
+            borderVisible: true,
+            wickVisible: true,
+            borderColor: '#FFD700',    // الحدود ذهبية للكل
+            wickColor: '#FFD700',      // الذيول ذهبية للكل
+            borderUpColor: '#FFD700',
+            borderDownColor: '#FFD700',
+            wickUpColor: '#FFD700',
+            wickDownColor: '#FFD700',
         });
 
-        // 3. إضافة مؤشر متوسط متحرك (SMA 20) بلون ذهبي
-        const smaData = chart.addLineSeries({
-            color: '#FFD700',
-            lineWidth: 2,
-            title: 'SMA 20'
-        });
-
-        // 4. دالة جلب البيانات من Binance (XAU/USD Equivalent)
-        async function loadHistoricalData() {
+        // 3. جلب البيانات من بينانس
+        async function fetchGoldData() {
             try {
-                const symbol = 'PAXGUSDT'; // رمز الذهب
-                const interval = '30m';    // فريم 30 دقيقة
-                const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=200`);
-                const data = await response.json();
-                
-                const formattedData = data.map(d => ({
+                const response = await fetch('https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=30m&limit=150');
+                const rawData = await response.json();
+                const data = rawData.map(d => ({
                     time: d[0] / 1000,
                     open: parseFloat(d[1]),
                     high: parseFloat(d[2]),
                     low: parseFloat(d[3]),
                     close: parseFloat(d[4])
                 }));
-
-                candleSeries.setData(formattedData);
-                
-                // حساب المتوسط المتحرك البسيط
-                const smaLine = calculateSMA(formattedData, 20);
-                smaData.setData(smaLine);
-
-            } catch (error) {
-                console.error("خطأ في جلب البيانات:", error);
-            }
+                candleSeries.setData(data);
+                chart.timeScale().fitContent();
+            } catch (e) { console.error("Data Error", e); }
         }
 
-        // دالة حساب المتوسط المتحرك (SMA)
-        function calculateSMA(data, period) {
-            let res = [];
-            for (let i = period; i < data.length; i++) {
-                const slice = data.slice(i - period, i);
-                const sum = slice.reduce((a, b) => a + b.close, 0);
-                res.push({ time: data[i].time, value: sum / period });
-            }
-            return res;
-        }
-
-        // 5. التحديث اللحظي (Real-time Update)
-        setInterval(async () => {
-            const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=PAXGUSDT`);
-            const ticker = await response.json();
-            const price = parseFloat(ticker.price);
-            
-            // تحديث السعر الحالي في الشمعة الأخيرة
-            // (ملاحظة: للتحديث الاحترافي للشموع يفضل استخدام WebSocket، ولكن fetch كافٍ للمبتدئين)
-        }, 5000);
-
-        // تشغيل الجلب عند التحميل
-        loadHistoricalData();
-
-        // جعل الشارت متجاوباً مع تغيير حجم الشاشة (الموبايل)
-        window.onresize = () => {
-            chart.applyOptions({ 
-                width: window.innerWidth, 
-                height: window.innerHeight 
+        // 4. ميزة إضافة خطوط الرسم (أفقي كمثال)
+        function addHorizontalLine() {
+            const price = chart.priceScale('right').coordinateToPrice(100) || 2040;
+            const line = candleSeries.createPriceLine({
+                price: price,
+                color: '#FFD700',
+                lineWidth: 2,
+                lineStyle: LightweightCharts.LineStyle.Dashed,
+                axisLabelVisible: true,
+                title: 'دعم/مقاومة',
             });
-        };
+        }
+
+        function clearLines() {
+            location.reload(); // طريقة سريعة لمسح كل شيء والبدء من جديد
+        }
+
+        fetchGoldData();
+        window.onresize = () => chart.applyOptions({ width: window.innerWidth, height: window.innerHeight });
     </script>
 </body>
 </html>
