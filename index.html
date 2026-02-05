@@ -3,10 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Elite Spark - Dark Gold</title>
+    <title>Elite Spark - Live & Memory</title>
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
-        /* العودة للخلفية السوداء الصافية */
         body { margin: 0; padding: 0; overflow: hidden; background-color: #000000; font-family: 'Segoe UI', sans-serif; }
         #chart { width: 100vw; height: 100vh; z-index: 1; }
         
@@ -14,12 +13,12 @@
         .brand-container {
             position: absolute; top: 20px; left: 20px; z-index: 10;
             color: #FFD700; pointer-events: none;
+            display: flex; flex-direction: column; align-items: center;
         }
         .brand-container h1 { margin: 0; font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
         .brand-container p { margin: 2px 0; font-size: 12px; opacity: 0.8; }
         .user-logo { width: 45px; height: 45px; margin-top: 8px; border: 0px solid #FFD700; border-radius: 1px; }
 
-        /* العد التنازلي - تحسين الشكل والمكان */
         #countdown-box {
             position: absolute; top: 20px; right: 80px; z-index: 10;
             display: flex; flex-direction: column; align-items: center;
@@ -29,7 +28,6 @@
         #countdown-label { color: #FFD700; font-size: 9px; text-transform: uppercase; margin-bottom: 2px; }
         #countdown { color: #FFD700; font-weight: bold; font-size: 16px; font-family: 'Courier New', monospace; }
 
-        /* مبدل الفريمات - أسفل الشاشة */
         .timeframes {
             position: absolute; bottom: 30px; left: 20px;
             z-index: 20; display: flex; gap: 10px;
@@ -39,6 +37,17 @@
             padding: 6px 15px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: 0.3s;
         }
         .tf-btn.active { background: #FFD700; color: #000; font-weight: bold; }
+
+        /* [NEW: UI] أزرار التحكم بالرسم */
+        .drawing-controls {
+            position: absolute; top: 22px; right: 180px; z-index: 20;
+            display: flex; flex-direction: row; gap: 10px;
+        }
+        .draw-btn {
+            background: rgba(0,0,0,0.6); border: 1px solid #FFD700; color: #FFD700;
+            width: 40px; height: 40px; border-radius: 5px; cursor: pointer; font-size: 18px;
+        }
+        .draw-btn.active { background: #FFD700; color: #000; }
     </style>
 </head>
 <body>
@@ -54,6 +63,11 @@
         <img src="https://i.ibb.co/R4kwHrMc/image.png" class="user-logo" alt="Logo">
     </div>
 
+    <div class="drawing-controls">
+        <button class="draw-btn" title="رسم خط أفقي" onclick="addPriceLine()">➖</button>
+        <button class="draw-btn" style="color:red" title="مسح الكل" onclick="clearAllDrawings()">🗑️</button>
+    </div>
+
     <div class="timeframes">
         <button class="tf-btn" onclick="changeTf('1m', this)">1M</button>
         <button class="tf-btn" onclick="changeTf('5m', this)">5M</button>
@@ -63,10 +77,10 @@
     <div id="chart"></div>
 
     <script>
-        let currentInterval = '15m'; // الفريم الافتراضي
+        let currentInterval = '15m';
         let countdownTimer;
+        let socket; // [NEW: SOCKET VARIABLE]
 
-        // 1. إنشاء الشارت بخلفية سوداء صلبة
         const chart = LightweightCharts.createChart(document.getElementById('chart'), {
             layout: { background: { color: '#000000' }, textColor: '#FFD700' },
             grid: { vertLines: { visible: false }, horzLines: { visible: false } },
@@ -85,45 +99,84 @@
             wickUpColor: '#FFD700', wickDownColor: '#FFD700'
         });
 
-        // 2. دالة جلب البيانات وتحديثها
+        // [NEW: DRAWING STORAGE] نظام حفظ الرسوم
+        let savedLines = JSON.parse(localStorage.getItem('elite_drawings') || '[]');
+
+        function loadSavedLines() {
+            savedLines.forEach(price => {
+                candleSeries.createPriceLine({
+                    price: price, color: '#FFD700', lineWidth: 2,
+                    lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true
+                });
+            });
+        }
+
         async function updateChartData(interval) {
             try {
                 const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=${interval}&limit=500`);
                 const rawData = await response.json();
                 const data = rawData.map(d => ({
-                    time: d[0] / 1000,
-                    open: parseFloat(d[1]), high: parseFloat(d[2]),
+                    time: d[0] / 1000, open: parseFloat(d[1]), high: parseFloat(d[2]),
                     low: parseFloat(d[3]), close: parseFloat(d[4])
                 }));
                 candleSeries.setData(data);
-                chart.timeScale().fitContent();
-                
-                // إعادة ضبط العد التنازلي بناءً على الفريم الجديد
                 setupCountdown(interval);
-            } catch (e) { console.error("Error fetching data", e); }
+                connectSocket(interval); // [NEW: CALL SOCKET]
+                loadSavedLines(); // [NEW: LOAD DRAWINGS]
+            } catch (e) { console.error(e); }
         }
 
-        // 3. منطق العد التنازلي الذكي والمربوط بالفريم
+        // [NEW: LIVE UPDATE] ربط البث المباشر للشمعة
+        function connectSocket(interval) {
+            if (socket) socket.close();
+            socket = new WebSocket(`wss://stream.binance.com:9443/ws/paxgusdt@kline_${interval}`);
+            socket.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                const k = msg.k;
+                candleSeries.update({
+                    time: k.t / 1000,
+                    open: parseFloat(k.o), high: parseFloat(k.h),
+                    low: parseFloat(k.l), close: parseFloat(k.c)
+                });
+            };
+        }
+
+        // [NEW: DRAWING LOGIC] إضافة خطوط وحفظها
+        function addPriceLine() {
+            const price = candleSeries.priceLines().length > 0 ? candleSeries.priceLines()[0].options().price : 2050; 
+            // ملاحظة: في النسخة القادمة سنجعل الخط يتبع مكان النقرة بالضبط
+            const newPrice = prompt("أدخل سعر الخط (أو اتركه وسيظهر عند السعر الحالي):", "");
+            const finalPrice = newPrice ? parseFloat(newPrice) : candleSeries.data()[candleSeries.data().length-1].close;
+            
+            candleSeries.createPriceLine({
+                price: finalPrice, color: '#FFD700', lineWidth: 2,
+                lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true
+            });
+            
+            savedLines.push(finalPrice);
+            localStorage.setItem('elite_drawings', JSON.stringify(savedLines));
+        }
+
+        function clearAllDrawings() {
+            if(confirm("هل تريد مسح جميع الرسوم؟")) {
+                localStorage.removeItem('elite_drawings');
+                location.reload();
+            }
+        }
+
         function setupCountdown(interval) {
             if (countdownTimer) clearInterval(countdownTimer);
-            
-            const minutes = parseInt(interval); // استخراج الرقم من (1m, 5m, 15m)
+            const minutes = parseInt(interval);
             const intervalMs = minutes * 60 * 1000;
-
             countdownTimer = setInterval(() => {
                 const now = new Date().getTime();
-                const timePassed = now % intervalMs;
-                const timeLeft = intervalMs - timePassed;
-
+                const timeLeft = intervalMs - (now % intervalMs);
                 const m = Math.floor(timeLeft / 60000);
                 const s = Math.floor((timeLeft % 60000) / 1000);
-
-                document.getElementById('countdown').innerText = 
-                    `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                document.getElementById('countdown').innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
             }, 1000);
         }
 
-        // 4. تبديل الفريمات
         function changeTf(tf, btn) {
             currentInterval = tf;
             document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
@@ -131,12 +184,8 @@
             updateChartData(tf);
         }
 
-        // البداية
         updateChartData(currentInterval);
-
-        window.onresize = () => {
-            chart.applyOptions({ width: window.innerWidth, height: window.innerHeight });
-        };
+        window.onresize = () => chart.applyOptions({ width: window.innerWidth, height: window.innerHeight });
     </script>
 </body>
 </html>
