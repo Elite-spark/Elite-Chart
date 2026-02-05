@@ -64,7 +64,7 @@
     </div>
 
     <div class="drawing-controls">
-        <button class="draw-btn" title="رسم خط أفقي" onclick="addPriceLine()">➖</button>
+        <button class="draw-btn" title="رسم خط أفقي" onclick="addEliteLine()">➕</button>
         <button class="draw-btn" style="color:red" title="مسح الكل" onclick="clearAllDrawings()">🗑️</button>
     </div>
 
@@ -99,14 +99,15 @@
             wickUpColor: '#FFD700', wickDownColor: '#FFD700'
         });
 
-        // [NEW: DRAWING STORAGE] نظام حفظ الرسوم
-        let savedLines = JSON.parse(localStorage.getItem('elite_drawings') || '[]');
+        // [NEW: ELITE STORAGE] نظام الذاكرة
+        let eliteLines = JSON.parse(localStorage.getItem('elite_levels') || '[]');
 
-        function loadSavedLines() {
-            savedLines.forEach(price => {
+        function renderSavedLines() {
+            eliteLines.forEach(price => {
                 candleSeries.createPriceLine({
                     price: price, color: '#FFD700', lineWidth: 2,
-                    lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true
+                    lineStyle: LightweightCharts.LineStyle.Dashed,
+                    axisLabelVisible: true, title: 'ELITE LEVEL'
                 });
             });
         }
@@ -120,9 +121,10 @@
                     low: parseFloat(d[3]), close: parseFloat(d[4])
                 }));
                 candleSeries.setData(data);
+                renderSavedLines(); // استعادة الخطوط بعد تحميل البيانات
                 setupCountdown(interval);
                 connectSocket(interval); // [NEW: CALL SOCKET]
-                loadSavedLines(); // [NEW: LOAD DRAWINGS]
+               
             } catch (e) { console.error(e); }
         }
 
@@ -141,20 +143,20 @@
             };
         }
 
-        // [NEW: DRAWING LOGIC] إضافة خطوط وحفظها
-        function addPriceLine() {
-            const price = candleSeries.priceLines().length > 0 ? candleSeries.priceLines()[0].options().price : 2050; 
-            // ملاحظة: في النسخة القادمة سنجعل الخط يتبع مكان النقرة بالضبط
-            const newPrice = prompt("أدخل سعر الخط (أو اتركه وسيظهر عند السعر الحالي):", "");
-            const finalPrice = newPrice ? parseFloat(newPrice) : candleSeries.data()[candleSeries.data().length-1].close;
-            
+         // [NEW: ADD LINE FUNCTION] إضافة خط عند السعر الحالي
+        function addEliteLine() {
+            const data = candleSeries.data();
+            if (data.length === 0) return;
+            const currentPrice = data[data.length - 1].close;
+
             candleSeries.createPriceLine({
-                price: finalPrice, color: '#FFD700', lineWidth: 2,
-                lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true
+                price: currentPrice, color: '#FFD700', lineWidth: 2,
+                lineStyle: LightweightCharts.LineStyle.Dashed,
+                axisLabelVisible: true, title: 'ELITE LEVEL'
             });
-            
-            savedLines.push(finalPrice);
-            localStorage.setItem('elite_drawings', JSON.stringify(savedLines));
+
+            eliteLines.push(currentPrice);
+            localStorage.setItem('elite_levels', JSON.stringify(eliteLines));
         }
 
         function clearAllDrawings() {
@@ -186,6 +188,7 @@
 
         updateChartData(currentInterval);
         window.onresize = () => chart.applyOptions({ width: window.innerWidth, height: window.innerHeight });
+        
     </script>
 </body>
 </html>
