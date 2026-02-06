@@ -3,65 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Elite Spark - Ultimate Interaction</title>
+    <title>Elite Spark - WebView Stable</title>
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; background-color: #000000; font-family: 'Segoe UI', sans-serif; }
-        #chart { width: 100vw; height: 100vh; z-index: 1; }
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; }
+        #chart { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; }
         
-        /* الستايل الملكي محفوظ بدقة */
         .brand-container {
             position: absolute; top: 20px; left: 20px; z-index: 10;
-            color: #FFD700; pointer-events: none;
-            display: flex; flex-direction: column; align-items: center;
+            color: #FFD700; pointer-events: none; text-align: center;
         }
-        .brand-container h1 { margin: 0; font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
-        .brand-container p { margin: 2px 0; font-size: 12px; opacity: 0.8; }
-        .user-logo { width: 45px; height: 45px; margin-top: 8px; }
+        .brand-container h1 { margin: 0; font-size: 16px; letter-spacing: 1.5px; }
+        .user-logo { width: 40px; height: 40px; margin-top: 5px; }
 
         #countdown-box {
-            position: absolute; top: 20px; right: 80px; z-index: 10;
-            display: flex; flex-direction: column; align-items: center;
-            background: rgba(20, 20, 20, 0.8); border: 1px solid #FFD700;
-            padding: 5px 12px; border-radius: 8px; min-width: 60px;
+            position: absolute; top: 20px; right: 20px; z-index: 10;
+            background: rgba(10, 10, 10, 0.9); border: 1px solid #FFD700;
+            padding: 4px 10px; border-radius: 6px; color: #FFD700; text-align: center;
         }
-        #countdown { color: #FFD700; font-weight: bold; font-size: 16px; font-family: 'Courier New', monospace; }
 
         .drawing-controls {
-            position: absolute; top: 22px; right: 180px; z-index: 20;
-            display: flex; flex-direction: row; gap: 10px;
+            position: absolute; top: 80px; right: 20px; z-index: 20;
+            display: flex; flex-direction: column; gap: 10px;
         }
         .draw-btn {
-            background: rgba(0,0,0,0.6); border: 1px solid #FFD700; color: #FFD700;
-            width: 40px; height: 40px; border-radius: 5px; cursor: pointer; font-size: 18px;
+            background: rgba(0,0,0,0.8); border: 1.5px solid #FFD700; color: #FFD700;
+            width: 42px; height: 42px; border-radius: 8px; cursor: pointer; font-size: 20px;
         }
 
         .timeframes {
-            position: absolute; bottom: 30px; left: 20px; z-index: 20; display: flex; gap: 10px;
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            z-index: 20; display: flex; gap: 8px;
         }
         .tf-btn {
             background: #000; border: 1px solid #FFD700; color: #FFD700;
-            padding: 6px 15px; border-radius: 6px; cursor: pointer; font-size: 12px;
+            padding: 6px 12px; border-radius: 5px; font-size: 11px;
         }
         .tf-btn.active { background: #FFD700; color: #000; font-weight: bold; }
     </style>
 </head>
 <body>
     
-    <div id="countdown-box">
-        <div style="color: #FFD700; font-size: 9px;">NEXT CANDLE</div>
-        <div id="countdown">00:00</div>
-    </div>
-    
+    <div id="chart"></div>
+
     <div class="brand-container">
         <h1>ELITE SPARK</h1>
-        <p>XAU/USD - GOLD LIVE</p>
-        <img src="https://i.ibb.co/R4kwHrMc/image.png" class="user-logo" alt="Logo">
+        <img src="https://i.ibb.co/R4kwHrMc/image.png" class="user-logo">
+    </div>
+
+    <div id="countdown-box">
+        <div style="font-size: 8px;">NEXT CANDLE</div>
+        <div id="countdown" style="font-size: 14px; font-weight: bold;">00:00</div>
     </div>
 
     <div class="drawing-controls">
-        <button class="draw-btn" onclick="addPriceLine()">➕</button>
-        <button class="draw-btn" style="color:red" onclick="clearAllDrawings()">🗑️</button>
+        <button class="draw-btn" onclick="addEliteLine()">➕</button>
+        <button class="draw-btn" style="border-color: #ff4444; color: #ff4444;" onclick="clearAllDrawings()">🗑️</button>
     </div>
 
     <div class="timeframes">
@@ -70,122 +67,91 @@
         <button class="tf-btn active" onclick="changeTf('15m', this)">15M</button>
     </div>
 
-    <div id="chart"></div>
-
     <script>
-        let currentInterval = '15m';
-        let socket, countdownTimer;
-        let eliteLines = []; 
-        let savedPrices = JSON.parse(localStorage.getItem('elite_drawings') || '[]');
-        
-        // متغيرات التحكم في السحب
-        let isDragging = false;
-        let activeIndex = -1;
-        let longPressTimer;
+        let chart, candleSeries, socket, countdownTimer;
+        let savedPrices = JSON.parse(localStorage.getItem('elite_levels') || '[]');
+        let eliteLines = [];
+        let isMoving = false;
+        let movingIndex = -1;
 
-        const chart = LightweightCharts.createChart(document.getElementById('chart'), {
-            layout: { background: { color: '#000000' }, textColor: '#FFD700' },
-            grid: { vertLines: { visible: false }, horzLines: { visible: false } },
-            crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-            rightPriceScale: { borderColor: '#FFD700' },
-            timeScale: { borderColor: '#FFD700', timeVisible: true }
-        });
+        // دالة البدء الأكيد (لحل مشكلة اختفاء الشموع في WebView)
+        window.onload = function() {
+            initChart();
+            updateChartData('15m');
+        };
 
-        const candleSeries = chart.addCandlestickSeries({
-            upColor: '#FFD700', downColor: '#000',
-            borderUpColor: '#FFD700', borderDownColor: '#FFD700',
-            wickUpColor: '#FFD700', wickDownColor: '#FFD700'
-        });
+        function initChart() {
+            chart = LightweightCharts.createChart(document.getElementById('chart'), {
+                layout: { background: { color: '#000000' }, textColor: '#FFD700' },
+                grid: { vertLines: { visible: false }, horzLines: { visible: false } },
+                rightPriceScale: { borderColor: '#FFD700' },
+                timeScale: { borderColor: '#FFD700', timeVisible: true }
+            });
 
-        // إنشاء الخطوط
+            candleSeries = chart.addCandlestickSeries({
+                upColor: '#FFD700', downColor: '#000',
+                borderUpColor: '#FFD700', borderDownColor: '#FFD700',
+                wickUpColor: '#FFD700', wickDownColor: '#FFD700'
+            });
+
+            setupTouchInteractions();
+        }
+
         function renderLines() {
             eliteLines.forEach(l => candleSeries.removePriceLine(l));
             eliteLines = [];
-            savedPrices.forEach((p, index) => {
+            savedPrices.forEach((p, i) => {
                 const line = candleSeries.createPriceLine({
                     price: p, color: '#FFD700', lineWidth: 2,
                     lineStyle: LightweightCharts.LineStyle.Dashed,
-                    axisLabelVisible: true, title: 'LEVEL ' + (index + 1)
+                    axisLabelVisible: true, title: 'LEVEL ' + (i+1)
                 });
                 eliteLines.push(line);
             });
         }
 
-        function addPriceLine() {
+        function addEliteLine() {
             const data = candleSeries.data();
-            if (!data.length) return;
-            const price = data[data.length - 1].close;
+            if (data.length === 0) return;
+            const price = data[data.length-1].close;
             savedPrices.push(price);
-            updateStorage();
+            localStorage.setItem('elite_levels', JSON.stringify(savedPrices));
             renderLines();
         }
 
-        function updateStorage() {
-            localStorage.setItem('elite_drawings', JSON.stringify(savedPrices));
+        function setupTouchInteractions() {
+            const chartElement = document.getElementById('chart');
+
+            const getPriceFromY = (y) => {
+                const rect = chartElement.getBoundingClientRect();
+                return chart.priceScale('right').coordinateToPrice(y - rect.top);
+            };
+
+            // معالجة اللمس للموبايل بدقة عالية
+            chartElement.addEventListener('touchstart', (e) => {
+                const price = getPriceFromY(e.touches[0].clientY);
+                movingIndex = savedPrices.findIndex(p => Math.abs(p - price) < 8);
+                if (movingIndex !== -1) isMoving = true;
+            }, { passive: false });
+
+            chartElement.addEventListener('touchmove', (e) => {
+                if (isMoving && movingIndex !== -1) {
+                    e.preventDefault(); // منع سحب الصفحة
+                    const newPrice = getPriceFromY(e.touches[0].clientY);
+                    savedPrices[movingIndex] = newPrice;
+                    renderLines();
+                }
+            }, { passive: false });
+
+            chartElement.addEventListener('touchend', () => {
+                if (isMoving) {
+                    localStorage.setItem('elite_levels', JSON.stringify(savedPrices));
+                    isMoving = false;
+                    movingIndex = -1;
+                }
+            });
         }
 
-        // --- محرك التفاعل المطور (لمس + ماوس) ---
-        const chartDiv = document.getElementById('chart');
-
-        function handleStart(y) {
-            const price = chart.priceScale('right').coordinateToPrice(y);
-            // البحث بحساسية 10 نقاط لتسهيل اللمس
-            activeIndex = savedPrices.findIndex(p => Math.abs(p - price) < 10);
-            
-            if (activeIndex !== -1) {
-                isDragging = true;
-                // تفعيل مؤقت للحذف (إذا ضغطت لثانية واحدة سيحذف الخط)
-                longPressTimer = setTimeout(() => {
-                    if (isDragging) {
-                        if (confirm("حذف هذا الخط؟")) {
-                            savedPrices.splice(activeIndex, 1);
-                            updateStorage();
-                            renderLines();
-                            isDragging = false;
-                        }
-                    }
-                }, 800);
-            }
-        }
-
-        function handleMove(y) {
-            if (isDragging && activeIndex !== -1) {
-                clearTimeout(longPressTimer); // إلغاء الحذف لأننا بدأنا نسحب
-                const newPrice = chart.priceScale('right').coordinateToPrice(y);
-                savedPrices[activeIndex] = newPrice;
-                renderLines();
-            }
-        }
-
-        function handleEnd() {
-            isDragging = false;
-            activeIndex = -1;
-            clearTimeout(longPressTimer);
-            updateStorage();
-        }
-
-        // أحداث الماوس
-        chartDiv.addEventListener('mousedown', (e) => handleStart(e.offsetY));
-        window.addEventListener('mousemove', (e) => handleMove(e.offsetY));
-        window.addEventListener('mouseup', handleEnd);
-
-        // أحداث اللمس (للموبايل)
-        chartDiv.addEventListener('touchstart', (e) => {
-            const touch = e.touches[0];
-            const rect = chartDiv.getBoundingClientRect();
-            handleStart(touch.clientY - rect.top);
-        }, {passive: false});
-
-        chartDiv.addEventListener('touchmove', (e) => {
-            const touch = e.touches[0];
-            const rect = chartDiv.getBoundingClientRect();
-            handleMove(touch.clientY - rect.top);
-            if (isDragging) e.preventDefault(); // منع اهتزاز الصفحة أثناء السحب
-        }, {passive: false});
-
-        chartDiv.addEventListener('touchend', handleEnd);
-
-        // --- بقية الوظائف الأساسية ---
         async function updateChartData(interval) {
             try {
                 const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=${interval}&limit=500`);
@@ -193,8 +159,10 @@
                 candleSeries.setData(raw.map(d => ({
                     time: d[0] / 1000, open: parseFloat(d[1]), high: parseFloat(d[2]), low: parseFloat(d[3]), close: parseFloat(d[4])
                 })));
-                renderLines(); connectSocket(interval); setupCountdown(interval);
-            } catch (e) { console.error(e); }
+                renderLines();
+                connectSocket(interval);
+                setupCountdown(interval);
+            } catch (e) { console.error("Error loading data:", e); }
         }
 
         function connectSocket(interval) {
@@ -211,25 +179,24 @@
             const ms = parseInt(interval) * 60000;
             countdownTimer = setInterval(() => {
                 const left = ms - (Date.now() % ms);
-                document.getElementById('countdown').innerText = `${Math.floor(left/60000).toString().padStart(2,'0')}:${Math.floor((left%60000)/1000).toString().padStart(2,'0')}`;
+                document.getElementById('countdown').innerText = 
+                    `${Math.floor(left/60000).toString().padStart(2,'0')}:${Math.floor((left%60000)/1000).toString().padStart(2,'0')}`;
             }, 1000);
         }
 
         function changeTf(tf, btn) {
-            currentInterval = tf;
             document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             updateChartData(tf);
         }
 
         function clearAllDrawings() {
-            if(confirm("مسح كل الرسوم؟")) {
-                savedPrices = []; renderLines(); updateStorage();
+            if(confirm("مسح جميع المستويات؟")) {
+                savedPrices = [];
+                localStorage.removeItem('elite_levels');
+                renderLines();
             }
         }
-
-        updateChartData(currentInterval);
-        window.onresize = () => chart.applyOptions({ width: window.innerWidth, height: window.innerHeight });
     </script>
 </body>
 </html>
