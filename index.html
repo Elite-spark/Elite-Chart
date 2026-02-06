@@ -563,6 +563,7 @@ function changeTf(tf, btn) {
     updateChartData(tf);
 }
 
+
 // [INITIALIZATION]
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM loaded, initializing app...');
@@ -572,6 +573,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // إعداد أحداث الحذف
     setupLineDeletion();
+
+    updateChartData(interval)
     
     // إعداد أحداث النافذة
     window.addEventListener('resize', () => {
