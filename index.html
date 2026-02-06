@@ -79,7 +79,7 @@
     <script>
 let currentInterval = '15m';
 let countdownTimer;
-let socket = null; // [FIXED: Initialize as null]
+let socket = null;
 
 const chart = LightweightCharts.createChart(document.getElementById('chart'), {
     layout: { background: { color: '#000000' }, textColor: '#FFD700' },
@@ -99,229 +99,287 @@ const candleSeries = chart.addCandlestickSeries({
     wickUpColor: '#FFD700', wickDownColor: '#FFD700'
 });
 
-// [FIXED: BETTER DRAWING LOGIC]
+// [FIXED: ENHANCED DRAWING SYSTEM]
 let eliteLines = [];
 let savedPrices = JSON.parse(localStorage.getItem('elite_drawings') || '[]');
+let activeLine = null;
 let isDragging = false;
-let draggedLine = null;
 let dragStartY = 0;
 let dragStartPrice = 0;
 
-// وظيفة استعادة الخطوط
+// [FIXED: INITIAL LOAD FOR ANDROID]
+let chartLoaded = false;
+
+// وظيفة استعادة الخطوط مع معالجة أفضل
 function loadSavedLines() {
     // مسح الخطوط القديمة
     eliteLines.forEach(l => {
         try {
-            candleSeries.removePriceLine(l);
-        } catch(e) { /* ignore if already removed */ }
+            candleSeries.removePriceLine(l.line);
+        } catch(e) { /* ignore */ }
     });
     eliteLines = [];
     
     // إنشاء الخطوط المحفوظة
-    savedPrices.forEach(price => {
-        createInteractiveLine(price);
+    savedPrices.forEach((price, index) => {
+        createInteractiveLine(price, false, index);
     });
 }
 
-// إنشاء خط تفاعلي
-function createInteractiveLine(price, isNew = false) {
+// [NEW: CREATE INTERACTIVE LINE WITH DRAGGABLE SUPPORT]
+function createInteractiveLine(price, isNew = false, id = null) {
+    const lineId = id !== null ? id : Date.now();
     const line = candleSeries.createPriceLine({
         price: price,
         color: '#FFD700',
         lineWidth: 2,
         lineStyle: LightweightCharts.LineStyle.Dashed,
         axisLabelVisible: true,
-        title: isNew ? `ELITE ${price.toFixed(2)}` : 'ELITE LEVEL',
+        title: isNew ? `ELITE ${price.toFixed(2)}` : `ELITE ${price.toFixed(2)}`,
     });
     
-    eliteLines.push(line);
-    return line;
+    // تخزين معلومات إضافية للتحكم
+    eliteLines.push({
+        id: lineId,
+        line: line,
+        price: price,
+        element: null // سنضيف العنصر DOM لاحقاً
+    });
+    
+    return { id: lineId, line: line };
 }
 
 // تحديث التخزين
 function updateStorage() {
-    savedPrices = eliteLines.map(line => line.options().price);
+    savedPrices = eliteLines.map(item => item.price);
     localStorage.setItem('elite_drawings', JSON.stringify(savedPrices));
 }
 
-// [FIXED: ADD LINE] إضافة خط جديد
-function addPriceLine() {
-    const data = candleSeries.data();
-    if (data.length === 0) return;
-    
-    // الحصول على آخر سعر
-    const currentPrice = data[data.length - 1].close;
-    
-    // إنشاء الخط
-    const line = createInteractiveLine(currentPrice, true);
-    updateStorage();
-    
-    return line;
-}
-
-// [FIXED: SOCKET CONNECTION]
-function connectSocket(interval) {
-    // إغلاق الاتصال السابق إذا كان موجوداً
-    if (socket) {
-        socket.close();
-        socket = null;
-    }
-    
-    // إنشاء اتصال جديد
-    const symbol = 'paxgusdt';
-    const wsInterval = interval.toLowerCase();
-    const wsUrl = `wss://stream.binance.com:9443/ws/${symbol}@kline_${wsInterval}`;
+// [FIXED: ANDROID INITIAL LOAD]
+async function initializeChart() {
+    console.log('Initializing chart for Android compatibility...');
     
     try {
-        socket = new WebSocket(wsUrl);
-        
-        socket.onopen = () => {
-            console.log('WebSocket connected for interval:', interval);
-        };
-        
-        socket.onmessage = (event) => {
-            try {
-                const msg = JSON.parse(event.data);
-                const k = msg.k;
-                
-                // تحديث الشمعة الحالية
-                candleSeries.update({
-                    time: k.t / 1000,
-                    open: parseFloat(k.o),
-                    high: parseFloat(k.h),
-                    low: parseFloat(k.l),
-                    close: parseFloat(k.c),
-                });
-            } catch (e) {
-                console.error('Error parsing WebSocket message:', e);
-            }
-        };
-        
-        socket.onerror = (error) => {
-            console.error('WebSocket error:', error);
-        };
-        
-        socket.onclose = () => {
-            console.log('WebSocket disconnected');
-        };
-    } catch (error) {
-        console.error('Error creating WebSocket:', error);
-    }
-}
-
-// [FIXED: FIND NEAREST LINE]
-function findNearestLine(price) {
-    if (eliteLines.length === 0) return -1;
-    
-    let nearestIndex = -1;
-    let minDiff = Infinity;
-    
-    eliteLines.forEach((line, index) => {
-        const linePrice = line.options().price;
-        const diff = Math.abs(linePrice - price);
-        
-        if (diff < minDiff) {
-            minDiff = diff;
-            nearestIndex = index;
-        }
-    });
-    
-    // إذا كان الفرق ضمن مدى معقول (0.5% من السعر)
-    const threshold = price * 0.005;
-    return minDiff <= threshold ? nearestIndex : -1;
-}
-
-// [FIXED: CLEAR ALL] دالة مسح الكل
-function clearAllDrawings() {
-    if(confirm("هل تريد مسح جميع الرسوم؟")) {
-        // مسح من الشارت
-        eliteLines.forEach(line => {
-            try {
-                candleSeries.removePriceLine(line);
-            } catch(e) { /* ignore */ }
+        // محاولة الاتصال بصفحة Binance الرئيسية أولاً
+        await fetch('https://api.binance.com/api/v3/ping', {
+            method: 'GET',
+            mode: 'no-cors'
+        }).catch(() => {
+            // تجاهل الأخطاء هنا، هذه مجرد محاولة لتفعيل الاتصال
         });
         
-        // مسح من الذاكرة
-        eliteLines = [];
-        savedPrices = [];
+        // ثم تحميل البيانات
+        await updateChartData(currentInterval);
         
-        // مسح من التخزين
-        localStorage.removeItem('elite_drawings');
+        // تأكيد التحميل
+        chartLoaded = true;
+        console.log('Chart loaded successfully');
+        
+        // تحسين العرض لـ Android
+        setTimeout(() => {
+            chart.applyOptions({
+                width: window.innerWidth,
+                height: window.innerHeight
+            });
+        }, 500);
+        
+    } catch (error) {
+        console.error('Initialization error:', error);
+        
+        // محاولة بديلة إذا فشلت الأولى
+        setTimeout(() => {
+            updateChartData(currentInterval);
+        }, 2000);
     }
 }
 
-// [FIXED: COUNTDOWN]
-function setupCountdown(interval) {
-    if (countdownTimer) clearInterval(countdownTimer);
-    
-    const intervalMap = {
-        '1m': 1,
-        '5m': 5,
-        '15m': 15,
-        '1h': 60,
-        '4h': 240,
-        '1d': 1440
-    };
-    
-    const minutes = intervalMap[interval] || 15;
-    const intervalMs = minutes * 60 * 1000;
-    
-    function updateCountdown() {
-        const now = new Date().getTime();
-        const timeLeft = intervalMs - (now % intervalMs);
-        const m = Math.floor(timeLeft / 60000);
-        const s = Math.floor((timeLeft % 60000) / 1000);
-        document.getElementById('countdown').innerText = 
-            `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    }
-    
-    updateCountdown(); // تحديث فوري
-    countdownTimer = setInterval(updateCountdown, 1000);
-}
-
-// [FIXED: UPDATE CHART DATA]
+// [FIXED: UPDATE CHART DATA FOR ANDROID]
 async function updateChartData(interval) {
     try {
-        const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=${interval}&limit=500`);
+        console.log('Fetching data for interval:', interval);
         
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        // محاولة متعددة لتحسين العمل على Android
+        let success = false;
+        let attempts = 0;
+        let data = [];
+        
+        while (!success && attempts < 3) {
+            try {
+                const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=${interval}&limit=300`);
+                
+                if (response.ok) {
+                    const rawData = await response.json();
+                    data = rawData.map(d => ({
+                        time: d[0] / 1000,
+                        open: parseFloat(d[1]),
+                        high: parseFloat(d[2]),
+                        low: parseFloat(d[3]),
+                        close: parseFloat(d[4])
+                    }));
+                    success = true;
+                }
+            } catch (fetchError) {
+                console.log(`Attempt ${attempts + 1} failed, retrying...`);
+                attempts++;
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
         }
         
-        const rawData = await response.json();
-        const data = rawData.map(d => ({
-            time: d[0] / 1000,
-            open: parseFloat(d[1]),
-            high: parseFloat(d[2]),
-            low: parseFloat(d[3]),
-            close: parseFloat(d[4])
-        }));
+        if (!success) {
+            throw new Error('Failed to fetch data after 3 attempts');
+        }
         
         candleSeries.setData(data);
         setupCountdown(interval);
         connectSocket(interval);
         
-        // إعادة تحميل الخطوط بعد فترة بسيطة لضمان تحميل البيانات أولاً
+        // إعادة تحميل الخطوط
         setTimeout(() => {
             loadSavedLines();
-        }, 100);
+            
+            // [NEW: ADD DRAGGABLE EVENTS AFTER LOAD]
+            setupDraggableLines();
+        }, 300);
         
     } catch (e) {
-        console.error('Error fetching chart data:', e);
-        // يمكن إضافة رسالة للمستخدم هنا
+        console.error('Error in updateChartData:', e);
+        
+        // عرض رسالة للمستخدم
+        if (!chartLoaded) {
+            document.getElementById('chart').innerHTML = 
+                '<div style="color:#FFD700; text-align:center; padding-top:50px;">' +
+                'جاري تحميل البيانات...<br>' +
+                '<button onclick="retryConnection()" style="margin-top:20px; padding:10px 20px; background:#FFD700; color:#000; border:none; border-radius:5px;">إعادة المحاولة</button>' +
+                '</div>';
+        }
     }
 }
 
-// [FIXED: EVENT HANDLERS]
-function changeTf(tf, btn) {
-    currentInterval = tf;
-    document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    updateChartData(tf);
+// [NEW: RETRY FUNCTION]
+function retryConnection() {
+    updateChartData(currentInterval);
 }
 
-// تهيئة الأحداث
-function initEvents() {
+// [NEW: SETUP DRAGGABLE LINES]
+function setupDraggableLines() {
+    const chartContainer = document.getElementById('chart');
+    
+    // مسح الأحداث القديمة
+    chartContainer.removeEventListener('mousedown', startDrag);
+    chartContainer.removeEventListener('touchstart', startDragTouch);
+    document.removeEventListener('mousemove', doDrag);
+    document.removeEventListener('touchmove', doDragTouch);
+    document.removeEventListener('mouseup', stopDrag);
+    document.removeEventListener('touchend', stopDrag);
+    
+    // إضافة أحداث الماوس
+    chartContainer.addEventListener('mousedown', startDrag);
+    chartContainer.addEventListener('touchstart', startDragTouch, { passive: false });
+    
+    function startDrag(e) {
+        const rect = chartContainer.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        findAndActivateLine(y);
+        e.preventDefault();
+    }
+    
+    function startDragTouch(e) {
+        if (e.touches.length === 1) {
+            const rect = chartContainer.getBoundingClientRect();
+            const y = e.touches[0].clientY - rect.top;
+            findAndActivateLine(y);
+            e.preventDefault();
+        }
+    }
+    
+    function findAndActivateLine(y) {
+        const priceScale = chart.priceScale('right');
+        const price = priceScale.coordinateToPrice(y);
+        
+        // البحث عن أقرب خط
+        let nearestIndex = -1;
+        let minDiff = Infinity;
+        
+        eliteLines.forEach((item, index) => {
+            const diff = Math.abs(item.price - price);
+            if (diff < minDiff) {
+                minDiff = diff;
+                nearestIndex = index;
+            }
+        });
+        
+        // إذا كان الخط قريباً بما يكفي (1% من السعر)
+        if (nearestIndex !== -1 && minDiff < (eliteLines[nearestIndex].price * 0.01)) {
+            activeLine = eliteLines[nearestIndex];
+            isDragging = true;
+            dragStartY = y;
+            dragStartPrice = activeLine.price;
+            
+            // تغيير لون الخط أثناء السحب
+            activeLine.line.applyOptions({
+                color: '#00FF00',
+                lineWidth: 3
+            });
+        }
+    }
+    
+    function doDrag(e) {
+        if (!isDragging || !activeLine) return;
+        
+        const rect = chartContainer.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        updateLinePosition(y);
+        e.preventDefault();
+    }
+    
+    function doDragTouch(e) {
+        if (!isDragging || !activeLine || e.touches.length !== 1) return;
+        
+        const rect = chartContainer.getBoundingClientRect();
+        const y = e.touches[0].clientY - rect.top;
+        updateLinePosition(y);
+        e.preventDefault();
+    }
+    
+    function updateLinePosition(y) {
+        const priceScale = chart.priceScale('right');
+        const newPrice = priceScale.coordinateToPrice(y);
+        
+        // تحديث سعر الخط
+        activeLine.line.applyOptions({
+            price: newPrice
+        });
+        
+        // تحديث في الذاكرة
+        activeLine.price = newPrice;
+    }
+    
+    function stopDrag() {
+        if (isDragging && activeLine) {
+            // إعادة اللون الأصلي
+            activeLine.line.applyOptions({
+                color: '#FFD700',
+                lineWidth: 2
+            });
+            
+            // تحديث التخزين
+            updateStorage();
+            
+            // إعادة تعيين
+            isDragging = false;
+            activeLine = null;
+        }
+    }
+    
+    // إضافة الأحداث العامة
+    document.addEventListener('mousemove', doDrag);
+    document.addEventListener('touchmove', doDragTouch, { passive: false });
+    document.addEventListener('mouseup', stopDrag);
+    document.addEventListener('touchend', stopDrag);
+}
+
+// [FIXED: SINGLE LINE DELETE]
+function setupLineDeletion() {
     const chartContainer = document.getElementById('chart');
     
     // حدث النقر المزدوج للحذف
@@ -334,33 +392,206 @@ function initEvents() {
         const price = priceScale.coordinateToPrice(y);
         
         // البحث عن أقرب خط
-        const lineIndex = findNearestLine(price);
+        let nearestIndex = -1;
+        let minDiff = Infinity;
         
-        if (lineIndex !== -1) {
-            try {
-                // حذف الخط من الشارت
-                candleSeries.removePriceLine(eliteLines[lineIndex]);
-                // حذف من المصفوفة
-                eliteLines.splice(lineIndex, 1);
-                // تحديث التخزين
-                updateStorage();
-            } catch (error) {
-                console.error('Error removing line:', error);
+        eliteLines.forEach((item, index) => {
+            const diff = Math.abs(item.price - price);
+            if (diff < minDiff) {
+                minDiff = diff;
+                nearestIndex = index;
+            }
+        });
+        
+        // إذا كان الخط قريباً بما يكفي (1.5% من السعر)
+        if (nearestIndex !== -1 && minDiff < (eliteLines[nearestIndex].price * 0.015)) {
+            // تأكيد الحذف
+            if (confirm(`هل تريد حذف خط السعر ${eliteLines[nearestIndex].price.toFixed(2)}؟`)) {
+                try {
+                    // حذف الخط من الشارت
+                    candleSeries.removePriceLine(eliteLines[nearestIndex].line);
+                    
+                    // حذف من المصفوفة
+                    eliteLines.splice(nearestIndex, 1);
+                    
+                    // تحديث التخزين
+                    updateStorage();
+                    
+                    // رسالة تأكيد
+                    showNotification('تم حذف الخط بنجاح');
+                } catch (error) {
+                    console.error('Error removing line:', error);
+                    showNotification('حدث خطأ في حذف الخط', true);
+                }
             }
         }
     });
 }
 
-// تهيئة التطبيق
-updateChartData(currentInterval);
-initEvents();
+// [NEW: NOTIFICATION FUNCTION]
+function showNotification(message, isError = false) {
+    // إزالة الإشعارات القديمة
+    const oldNotif = document.querySelector('.elite-notification');
+    if (oldNotif) oldNotif.remove();
+    
+    // إنشاء إشعار جديد
+    const notif = document.createElement('div');
+    notif.className = 'elite-notification';
+    notif.style.cssText = `
+        position: fixed;
+        top: 100px;
+        right: 20px;
+        background: ${isError ? '#ff4444' : '#FFD700'};
+        color: ${isError ? '#fff' : '#000'};
+        padding: 10px 20px;
+        border-radius: 5px;
+        z-index: 1000;
+        font-weight: bold;
+        box-shadow: 0 0 10px rgba(255,215,0,0.5);
+        transition: opacity 0.3s;
+    `;
+    notif.textContent = message;
+    
+    document.body.appendChild(notif);
+    
+    // إزالة الإشعار بعد 3 ثوان
+    setTimeout(() => {
+        if (notif.parentNode) {
+            notif.style.opacity = '0';
+            setTimeout(() => notif.remove(), 300);
+        }
+    }, 3000);
+}
 
-// [FIXED: RESIZE HANDLER]
-window.addEventListener('resize', () => {
-    chart.applyOptions({
-        width: window.innerWidth,
-        height: window.innerHeight
+// [FIXED: ADD PRICE LINE]
+function addPriceLine() {
+    const data = candleSeries.data();
+    if (data.length === 0) {
+        showNotification('الرجاء الانتظار حتى يتم تحميل البيانات', true);
+        return;
+    }
+    
+    const currentPrice = data[data.length - 1].close;
+    createInteractiveLine(currentPrice, true);
+    updateStorage();
+    showNotification('تم إضافة خط جديد');
+    
+    // إعادة إعداد الأحداث للسحب والحذف
+    setupDraggableLines();
+}
+
+// [FIXED: CLEAR ALL]
+function clearAllDrawings() {
+    if (eliteLines.length === 0) {
+        showNotification('لا توجد خطوط لحذفها');
+        return;
+    }
+    
+    if (confirm(`هل تريد حذف جميع الخطوط (${eliteLines.length})؟`)) {
+        // مسح من الشارت
+        eliteLines.forEach(item => {
+            try {
+                candleSeries.removePriceLine(item.line);
+            } catch(e) { /* ignore */ }
+        });
+        
+        // مسح من الذاكرة
+        eliteLines = [];
+        savedPrices = [];
+        
+        // مسح من التخزين
+        localStorage.removeItem('elite_drawings');
+        
+        showNotification('تم حذف جميع الخطوط');
+    }
+}
+
+// [FIXED: SOCKET CONNECTION]
+function connectSocket(interval) {
+    if (socket) {
+        socket.close();
+        socket = null;
+    }
+    
+    try {
+        socket = new WebSocket(`wss://stream.binance.com:9443/ws/paxgusdt@kline_${interval}`);
+        
+        socket.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            const k = msg.k;
+            
+            candleSeries.update({
+                time: k.t / 1000,
+                open: parseFloat(k.o),
+                high: parseFloat(k.h),
+                low: parseFloat(k.l),
+                close: parseFloat(k.c),
+            });
+        };
+    } catch (error) {
+        console.error('WebSocket error:', error);
+    }
+}
+
+// [FIXED: COUNTDOWN]
+function setupCountdown(interval) {
+    if (countdownTimer) clearInterval(countdownTimer);
+    
+    const intervalMap = { '1m': 1, '5m': 5, '15m': 15 };
+    const minutes = intervalMap[interval] || 15;
+    const intervalMs = minutes * 60 * 1000;
+    
+    function updateCountdown() {
+        const now = Date.now();
+        const timeLeft = intervalMs - (now % intervalMs);
+        const m = Math.floor(timeLeft / 60000);
+        const s = Math.floor((timeLeft % 60000) / 1000);
+        document.getElementById('countdown').innerText = 
+            `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    
+    updateCountdown();
+    countdownTimer = setInterval(updateCountdown, 1000);
+}
+
+// [FIXED: CHANGE TIMEFRAME]
+function changeTf(tf, btn) {
+    currentInterval = tf;
+    document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateChartData(tf);
+}
+
+// [INITIALIZATION]
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, initializing app...');
+    
+    // بدء التحميل
+    initializeChart();
+    
+    // إعداد أحداث الحذف
+    setupLineDeletion();
+    
+    // إعداد أحداث النافذة
+    window.addEventListener('resize', () => {
+        chart.applyOptions({
+            width: window.innerWidth,
+            height: window.innerHeight
+        });
     });
+    
+    // إضافة CSS للإشعارات
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .elite-notification {
+            animation: fadeIn 0.3s ease-out;
+        }
+    `;
+    document.head.appendChild(style);
 });
     </script>
 </body>
