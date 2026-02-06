@@ -3,62 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Elite Spark - WebView Stable</title>
+    <title>Elite Spark - Live & Memory</title>
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; }
-        #chart { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; }
+        body { margin: 0; padding: 0; overflow: hidden; background-color: #000000; font-family: 'Segoe UI', sans-serif; }
+        #chart { width: 100vw; height: 100vh; z-index: 1; }
         
+        /* تنسيق الهوية البصرية */
         .brand-container {
             position: absolute; top: 20px; left: 20px; z-index: 10;
-            color: #FFD700; pointer-events: none; text-align: center;
+            color: #FFD700; pointer-events: none;
+            display: flex; flex-direction: column; align-items: center;
         }
-        .brand-container h1 { margin: 0; font-size: 16px; letter-spacing: 1.5px; }
-        .user-logo { width: 40px; height: 40px; margin-top: 5px; }
+        .brand-container h1 { margin: 0; font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
+        .brand-container p { margin: 2px 0; font-size: 12px; opacity: 0.8; }
+        .user-logo { width: 45px; height: 45px; margin-top: 8px; border: 0px solid #FFD700; border-radius: 1px; }
 
         #countdown-box {
-            position: absolute; top: 20px; right: 20px; z-index: 10;
-            background: rgba(10, 10, 10, 0.9); border: 1px solid #FFD700;
-            padding: 4px 10px; border-radius: 6px; color: #FFD700; text-align: center;
+            position: absolute; top: 20px; right: 80px; z-index: 10;
+            display: flex; flex-direction: column; align-items: center;
+            background: rgba(20, 20, 20, 0.8); border: 1px solid #FFD700;
+            padding: 5px 12px; border-radius: 8px; min-width: 60px;
         }
-
-        .drawing-controls {
-            position: absolute; top: 80px; right: 20px; z-index: 20;
-            display: flex; flex-direction: column; gap: 10px;
-        }
-        .draw-btn {
-            background: rgba(0,0,0,0.8); border: 1.5px solid #FFD700; color: #FFD700;
-            width: 42px; height: 42px; border-radius: 8px; cursor: pointer; font-size: 20px;
-        }
+        #countdown-label { color: #FFD700; font-size: 9px; text-transform: uppercase; margin-bottom: 2px; }
+        #countdown { color: #FFD700; font-weight: bold; font-size: 16px; font-family: 'Courier New', monospace; }
 
         .timeframes {
-            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            z-index: 20; display: flex; gap: 8px;
+            position: absolute; bottom: 30px; left: 20px;
+            z-index: 20; display: flex; gap: 10px;
         }
         .tf-btn {
             background: #000; border: 1px solid #FFD700; color: #FFD700;
-            padding: 6px 12px; border-radius: 5px; font-size: 11px;
+            padding: 6px 15px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: 0.3s;
         }
         .tf-btn.active { background: #FFD700; color: #000; font-weight: bold; }
+
+        /* [NEW: UI] أزرار التحكم بالرسم */
+        .drawing-controls {
+            position: absolute; top: 22px; right: 180px; z-index: 20;
+            display: flex; flex-direction: row; gap: 10px;
+        }
+        .draw-btn {
+            background: rgba(0,0,0,0.6); border: 1px solid #FFD700; color: #FFD700;
+            width: 40px; height: 40px; border-radius: 5px; cursor: pointer; font-size: 18px;
+        }
+        .draw-btn.active { background: #FFD700; color: #000; }
     </style>
 </head>
 <body>
     
-    <div id="chart"></div>
-
+    <div id="countdown-box">
+        <div id="countdown-label">Next Candle</div>
+        <div id="countdown">00:00</div>
+    </div>
+    
     <div class="brand-container">
         <h1>ELITE SPARK</h1>
-        <img src="https://i.ibb.co/R4kwHrMc/image.png" class="user-logo">
-    </div>
-
-    <div id="countdown-box">
-        <div style="font-size: 8px;">NEXT CANDLE</div>
-        <div id="countdown" style="font-size: 14px; font-weight: bold;">00:00</div>
+        <p>XAU/USD - GOLD LIVE</p>
+        <img src="https://i.ibb.co/R4kwHrMc/image.png" class="user-logo" alt="Logo">
     </div>
 
     <div class="drawing-controls">
-        <button class="draw-btn" onclick="addEliteLine()">➕</button>
-        <button class="draw-btn" style="border-color: #ff4444; color: #ff4444;" onclick="clearAllDrawings()">🗑️</button>
+        <button class="draw-btn" title="رسم خط أفقي" onclick="addPriceLine()">➕</button>
+        <button class="draw-btn" style="color:red" title="مسح الكل" onclick="clearAllDrawings()">🗑️</button>
     </div>
 
     <div class="timeframes">
@@ -67,136 +74,162 @@
         <button class="tf-btn active" onclick="changeTf('15m', this)">15M</button>
     </div>
 
+    <div id="chart"></div>
+
     <script>
-        let chart, candleSeries, socket, countdownTimer;
-        let savedPrices = JSON.parse(localStorage.getItem('elite_levels') || '[]');
-        let eliteLines = [];
-        let isMoving = false;
-        let movingIndex = -1;
+        let currentInterval = '15m';
+        let countdownTimer;
+        let socket; // [NEW: SOCKET VARIABLE]
 
-        // دالة البدء الأكيد (لحل مشكلة اختفاء الشموع في WebView)
-        window.onload = function() {
-            initChart();
-            updateChartData('15m');
-        };
+        const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+            layout: { background: { color: '#000000' }, textColor: '#FFD700' },
+            grid: { vertLines: { visible: false }, horzLines: { visible: false } },
+            crosshair: { 
+                mode: LightweightCharts.CrosshairMode.Normal,
+                vertLine: { color: '#FFD700', labelBackgroundColor: '#000' },
+                horzLine: { color: '#FFD700', labelBackgroundColor: '#000' }
+            },
+            rightPriceScale: { borderColor: '#FFD700' },
+            timeScale: { borderColor: '#FFD700', timeVisible: true }
+        });
 
-        function initChart() {
-            chart = LightweightCharts.createChart(document.getElementById('chart'), {
-                layout: { background: { color: '#000000' }, textColor: '#FFD700' },
-                grid: { vertLines: { visible: false }, horzLines: { visible: false } },
-                rightPriceScale: { borderColor: '#FFD700' },
-                timeScale: { borderColor: '#FFD700', timeVisible: true }
-            });
+        const candleSeries = chart.addCandlestickSeries({
+            upColor: '#FFD700', downColor: '#000',
+            borderUpColor: '#FFD700', borderDownColor: '#FFD700',
+            wickUpColor: '#FFD700', wickDownColor: '#FFD700'
+        });
 
-            candleSeries = chart.addCandlestickSeries({
-                upColor: '#FFD700', downColor: '#000',
-                borderUpColor: '#FFD700', borderDownColor: '#FFD700',
-                wickUpColor: '#FFD700', wickDownColor: '#FFD700'
-            });
+        // [NEW: INTERACTIVE DRAWING LOGIC] 
+        // استبدل قسم مصفوفة الخطوط والوظائف المتعلقة بها بهذا الجزء المطور
 
-            setupTouchInteractions();
-        }
+        let eliteLines = []; // مصفوفة لتخزين كائنات الخطوط الفعلية
+        let savedPrices = JSON.parse(localStorage.getItem('elite_drawings') || '[]');
+        let activeLine = null; // الخط الذي يتم تحريكه حالياً
 
-        function renderLines() {
+
+        // وظيفة استعادة الخطوط عند التحميل
+        function loadSavedLines() {
+            // مسح الخطوط القديمة من الشارت أولاً لتجنب التكرار
             eliteLines.forEach(l => candleSeries.removePriceLine(l));
             eliteLines = [];
-            savedPrices.forEach((p, i) => {
-                const line = candleSeries.createPriceLine({
-                    price: p, color: '#FFD700', lineWidth: 2,
-                    lineStyle: LightweightCharts.LineStyle.Dashed,
-                    axisLabelVisible: true, title: 'LEVEL ' + (i+1)
-                });
-                eliteLines.push(line);
-            });
-        }
 
-        function addEliteLine() {
-            const data = candleSeries.data();
-            if (data.length === 0) return;
-            const price = data[data.length-1].close;
-            savedPrices.push(price);
-            localStorage.setItem('elite_levels', JSON.stringify(savedPrices));
-            renderLines();
-        }
-
-        function setupTouchInteractions() {
-            const chartElement = document.getElementById('chart');
-
-            const getPriceFromY = (y) => {
-                const rect = chartElement.getBoundingClientRect();
-                return chart.priceScale('right').coordinateToPrice(y - rect.top);
-            };
-
-            // معالجة اللمس للموبايل بدقة عالية
-            chartElement.addEventListener('touchstart', (e) => {
-                const price = getPriceFromY(e.touches[0].clientY);
-                movingIndex = savedPrices.findIndex(p => Math.abs(p - price) < 8);
-                if (movingIndex !== -1) isMoving = true;
-            }, { passive: false });
-
-            chartElement.addEventListener('touchmove', (e) => {
-                if (isMoving && movingIndex !== -1) {
-                    e.preventDefault(); // منع سحب الصفحة
-                    const newPrice = getPriceFromY(e.touches[0].clientY);
-                    savedPrices[movingIndex] = newPrice;
-                    renderLines();
-                }
-            }, { passive: false });
-
-            chartElement.addEventListener('touchend', () => {
-                if (isMoving) {
-                    localStorage.setItem('elite_levels', JSON.stringify(savedPrices));
-                    isMoving = false;
-                    movingIndex = -1;
-                }
+            savedPrices.forEach(price => {
+              createInteractiveLine(price);
             });
         }
 
         async function updateChartData(interval) {
             try {
-                const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=${interval}&limit=500`);
-                const raw = await res.json();
-                candleSeries.setData(raw.map(d => ({
-                    time: d[0] / 1000, open: parseFloat(d[1]), high: parseFloat(d[2]), low: parseFloat(d[3]), close: parseFloat(d[4])
-                })));
-                renderLines();
-                connectSocket(interval);
+                const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=${interval}&limit=500`);
+                const rawData = await response.json();
+                const data = rawData.map(d => ({
+                    time: d[0] / 1000, open: parseFloat(d[1]), high: parseFloat(d[2]),
+                    low: parseFloat(d[3]), close: parseFloat(d[4])
+                }));
+                candleSeries.setData(data);
                 setupCountdown(interval);
-            } catch (e) { console.error("Error loading data:", e); }
+                connectSocket(interval); // [NEW: CALL SOCKET]
+                loadSavedLines(); // [NEW: LOAD DRAWINGS]
+            } catch (e) { console.error(e); }
         }
 
+        // [NEW: LIVE UPDATE] ربط البث المباشر للشمعة
         function connectSocket(interval) {
             if (socket) socket.close();
             socket = new WebSocket(`wss://stream.binance.com:9443/ws/paxgusdt@kline_${interval}`);
-            socket.onmessage = (e) => {
-                const k = JSON.parse(e.data).k;
-                candleSeries.update({ time: k.t / 1000, open: parseFloat(k.o), high: parseFloat(k.h), low: parseFloat(k.l), close: parseFloat(k.c) });
+            socket.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                const k = msg.k;
+                candleSeries.update({
+                    time: k.t / 1000,
+                    open: parseFloat(k.o), high: parseFloat(k.h),
+                    low: parseFloat(k.l), close: parseFloat(k.c)
+                });
             };
+        }
+
+        // إنشاء خط تفاعلي
+        function createInteractiveLine(price) {
+          const line = candleSeries.createPriceLine({
+            price: price,
+            color: '#FFD700',
+            lineWidth: 2,
+            lineStyle: LightweightCharts.LineStyle.Dashed,
+            axisLabelVisible: true,
+            title: 'ELITE LEVEL',
+          });
+          eliteLines.push(line);
+        }
+
+
+        // [MODIFIED: ADD LINE] إضافة خط جديد
+        function addPriceLine() {
+          const data = candleSeries.data();
+          if (data.length === 0) return;
+          const currentPrice = data[data.length - 1].close;
+
+          createInteractiveLine(currentPrice);
+          savedPrices.push(currentPrice);
+          updateStorage();
+        }
+
+        // [NEW: MOVE & DELETE LOGIC]
+        // إضافة مستمع للأحداث فوق حاوية الشارت
+        const chartContainer = document.getElementById('chart');
+
+        // تتبع النقرات المزدوجة للحذف
+        chartContainer.addEventListener('dblclick', (e) => {
+          const price = chart.priceScale('right').coordinateToPrice(e.offsetY);
+          // البحث عن أقرب خط للنقرة وحذفه
+          const threshold = 2; // مدى الحساسية للحذف
+          const lineIndex = savedPrices.findIndex(p => Math.abs(p - price) < threshold);
+    
+          if (lineIndex !== -1) {
+            candleSeries.removePriceLine(eliteLines[lineIndex]);
+            eliteLines.splice(lineIndex, 1);
+            savedPrices.splice(lineIndex, 1);
+            updateStorage();
+          }
+        });
+
+        // تتبع النقر للتحريك (تبسيطاً سنعتمد النقر المطول أو السحب في التحديث القادم)
+        function updateStorage() {
+          localStorage.setItem('elite_drawings', JSON.stringify(savedPrices));
+        }
+
+        // [FIXED: CLEAR ALL] إصلاح دالة مسح الكل
+        function clearAllDrawings() {
+          if(confirm("هل تريد مسح جميع الرسوم؟")) {
+            savedPrices = [];
+            eliteLines.forEach(l => candleSeries.removePriceLine(l));
+            eliteLines = [];
+            localStorage.removeItem('elite_drawings');
+            // لا داعي لإعادة تحميل الصفحة كاملة الآن، الشارت سيصبح نظيفاً فوراً
+          }
         }
 
         function setupCountdown(interval) {
             if (countdownTimer) clearInterval(countdownTimer);
-            const ms = parseInt(interval) * 60000;
+            const minutes = parseInt(interval);
+            const intervalMs = minutes * 60 * 1000;
             countdownTimer = setInterval(() => {
-                const left = ms - (Date.now() % ms);
-                document.getElementById('countdown').innerText = 
-                    `${Math.floor(left/60000).toString().padStart(2,'0')}:${Math.floor((left%60000)/1000).toString().padStart(2,'0')}`;
+                const now = new Date().getTime();
+                const timeLeft = intervalMs - (now % intervalMs);
+                const m = Math.floor(timeLeft / 60000);
+                const s = Math.floor((timeLeft % 60000) / 1000);
+                document.getElementById('countdown').innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
             }, 1000);
         }
 
         function changeTf(tf, btn) {
+            currentInterval = tf;
             document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             updateChartData(tf);
         }
 
-        function clearAllDrawings() {
-            if(confirm("مسح جميع المستويات؟")) {
-                savedPrices = [];
-                localStorage.removeItem('elite_levels');
-                renderLines();
-            }
-        }
+        updateChartData(currentInterval);
+        window.onresize = () => chart.applyOptions({ width: window.innerWidth, height: window.innerHeight });
     </script>
 </body>
 </html>
