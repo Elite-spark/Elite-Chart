@@ -44,7 +44,7 @@
             display: flex; flex-direction: row; gap: 10px;
         }
         .draw-btn {
-            background: rgba(0,0,0,0.6); border: 1px solid #FFD700; color: #FFD700;
+            background: rgba(0,0,0,0.6); border: 0px solid #FFD700; color: #FFD700;
             width: 40px; height: 40px; border-radius: 5px; cursor: pointer; font-size: 18px;
         }
         .draw-btn.active { background: #FFD700; color: #000; }
@@ -563,6 +563,8 @@ function changeTf(tf, btn) {
     updateChartData(tf);
 }
 
+  //updateChartData(interval);
+  updateChartData(currentInterval);
 
 // [INITIALIZATION]
 document.addEventListener('DOMContentLoaded', function() {
@@ -573,8 +575,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // إعداد أحداث الحذف
     setupLineDeletion();
-
-    updateChartData(interval);
     
     // إعداد أحداث النافذة
     window.addEventListener('resize', () => {
