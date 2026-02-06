@@ -209,15 +209,13 @@ async function updateChartData(interval) {
                 
                 if (response.ok) {
                     const rawData = await response.json();
-                    const data = rawData.map(d => ({
+                    data = rawData.map(d => ({
                         time: d[0] / 1000,
                         open: parseFloat(d[1]),
                         high: parseFloat(d[2]),
                         low: parseFloat(d[3]),
                         close: parseFloat(d[4])
                     }));
-                    candleSeries.setData(data);
-                    chart.timeScale().fitContent();
                     success = true;
                 }
             } catch (fetchError) {
@@ -226,6 +224,7 @@ async function updateChartData(interval) {
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
+        
         
         if (!success) {
             throw new Error('Failed to fetch data after 3 attempts');
