@@ -77,160 +77,291 @@
     <div id="chart"></div>
 
     <script>
-        let currentInterval = '15m';
-        let countdownTimer;
-        let socket; // [NEW: SOCKET VARIABLE]
+let currentInterval = '15m';
+let countdownTimer;
+let socket = null; // [FIXED: Initialize as null]
 
-        const chart = LightweightCharts.createChart(document.getElementById('chart'), {
-            layout: { background: { color: '#000000' }, textColor: '#FFD700' },
-            grid: { vertLines: { visible: false }, horzLines: { visible: false } },
-            crosshair: { 
-                mode: LightweightCharts.CrosshairMode.Normal,
-                vertLine: { color: '#FFD700', labelBackgroundColor: '#000' },
-                horzLine: { color: '#FFD700', labelBackgroundColor: '#000' }
-            },
-            rightPriceScale: { borderColor: '#FFD700' },
-            timeScale: { borderColor: '#FFD700', timeVisible: true }
-        });
+const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+    layout: { background: { color: '#000000' }, textColor: '#FFD700' },
+    grid: { vertLines: { visible: false }, horzLines: { visible: false } },
+    crosshair: { 
+        mode: LightweightCharts.CrosshairMode.Normal,
+        vertLine: { color: '#FFD700', labelBackgroundColor: '#000' },
+        horzLine: { color: '#FFD700', labelBackgroundColor: '#000' }
+    },
+    rightPriceScale: { borderColor: '#FFD700' },
+    timeScale: { borderColor: '#FFD700', timeVisible: true }
+});
 
-        const candleSeries = chart.addCandlestickSeries({
-            upColor: '#FFD700', downColor: '#000',
-            borderUpColor: '#FFD700', borderDownColor: '#FFD700',
-            wickUpColor: '#FFD700', wickDownColor: '#FFD700'
-        });
+const candleSeries = chart.addCandlestickSeries({
+    upColor: '#FFD700', downColor: '#000',
+    borderUpColor: '#FFD700', borderDownColor: '#FFD700',
+    wickUpColor: '#FFD700', wickDownColor: '#FFD700'
+});
 
-        // [NEW: INTERACTIVE DRAWING LOGIC] 
-        // استبدل قسم مصفوفة الخطوط والوظائف المتعلقة بها بهذا الجزء المطور
+// [FIXED: BETTER DRAWING LOGIC]
+let eliteLines = [];
+let savedPrices = JSON.parse(localStorage.getItem('elite_drawings') || '[]');
+let isDragging = false;
+let draggedLine = null;
+let dragStartY = 0;
+let dragStartPrice = 0;
 
-        let eliteLines = []; // مصفوفة لتخزين كائنات الخطوط الفعلية
-        let savedPrices = JSON.parse(localStorage.getItem('elite_drawings') || '[]');
-        let activeLine = null; // الخط الذي يتم تحريكه حالياً
+// وظيفة استعادة الخطوط
+function loadSavedLines() {
+    // مسح الخطوط القديمة
+    eliteLines.forEach(l => {
+        try {
+            candleSeries.removePriceLine(l);
+        } catch(e) { /* ignore if already removed */ }
+    });
+    eliteLines = [];
+    
+    // إنشاء الخطوط المحفوظة
+    savedPrices.forEach(price => {
+        createInteractiveLine(price);
+    });
+}
 
+// إنشاء خط تفاعلي
+function createInteractiveLine(price, isNew = false) {
+    const line = candleSeries.createPriceLine({
+        price: price,
+        color: '#FFD700',
+        lineWidth: 2,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: isNew ? `ELITE ${price.toFixed(2)}` : 'ELITE LEVEL',
+    });
+    
+    eliteLines.push(line);
+    return line;
+}
 
-        // وظيفة استعادة الخطوط عند التحميل
-        function loadSavedLines() {
-            // مسح الخطوط القديمة من الشارت أولاً لتجنب التكرار
-            eliteLines.forEach(l => candleSeries.removePriceLine(l));
-            eliteLines = [];
+// تحديث التخزين
+function updateStorage() {
+    savedPrices = eliteLines.map(line => line.options().price);
+    localStorage.setItem('elite_drawings', JSON.stringify(savedPrices));
+}
 
-            savedPrices.forEach(price => {
-              createInteractiveLine(price);
-            });
-        }
+// [FIXED: ADD LINE] إضافة خط جديد
+function addPriceLine() {
+    const data = candleSeries.data();
+    if (data.length === 0) return;
+    
+    // الحصول على آخر سعر
+    const currentPrice = data[data.length - 1].close;
+    
+    // إنشاء الخط
+    const line = createInteractiveLine(currentPrice, true);
+    updateStorage();
+    
+    return line;
+}
 
-        async function updateChartData(interval) {
+// [FIXED: SOCKET CONNECTION]
+function connectSocket(interval) {
+    // إغلاق الاتصال السابق إذا كان موجوداً
+    if (socket) {
+        socket.close();
+        socket = null;
+    }
+    
+    // إنشاء اتصال جديد
+    const symbol = 'paxgusdt';
+    const wsInterval = interval.toLowerCase();
+    const wsUrl = `wss://stream.binance.com:9443/ws/${symbol}@kline_${wsInterval}`;
+    
+    try {
+        socket = new WebSocket(wsUrl);
+        
+        socket.onopen = () => {
+            console.log('WebSocket connected for interval:', interval);
+        };
+        
+        socket.onmessage = (event) => {
             try {
-                const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=${interval}&limit=7000`);
-                const rawData = await response.json();
-                const data = rawData.map(d => ({
-                    time: d[0] / 1000, open: parseFloat(d[1]), high: parseFloat(d[2]),
-                    low: parseFloat(d[3]), close: parseFloat(d[4])
-                }));
-                candleSeries.setData(data);
-                setupCountdown(interval);
-                connectSocket(interval); // [NEW: CALL SOCKET]
-                loadSavedLines(); // [NEW: LOAD DRAWINGS]
-            } catch (e) { console.error(e); }
-        }
-
-        // [NEW: LIVE UPDATE] ربط البث المباشر للشمعة
-        function connectSocket(interval) {
-            if (socket) socket.close();
-            socket = new WebSocket(`wss://stream.binance.com:9443/ws/paxgusdt@kline_${interval}`);
-            socket.onmessage = (event) => {
                 const msg = JSON.parse(event.data);
                 const k = msg.k;
+                
+                // تحديث الشمعة الحالية
                 candleSeries.update({
                     time: k.t / 1000,
-                    open: parseFloat(k.o), high: parseFloat(k.h),
-                    low: parseFloat(k.l), close: parseFloat(k.c)
+                    open: parseFloat(k.o),
+                    high: parseFloat(k.h),
+                    low: parseFloat(k.l),
+                    close: parseFloat(k.c),
                 });
-            };
-        }
+            } catch (e) {
+                console.error('Error parsing WebSocket message:', e);
+            }
+        };
+        
+        socket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+        
+        socket.onclose = () => {
+            console.log('WebSocket disconnected');
+        };
+    } catch (error) {
+        console.error('Error creating WebSocket:', error);
+    }
+}
 
-        // إنشاء خط تفاعلي
-        function createInteractiveLine(price) {
-          const line = candleSeries.createPriceLine({
-            price: price,
-            color: '#FFD700',
-            lineWidth: 2,
-            lineStyle: LightweightCharts.LineStyle.Dashed,
-            axisLabelVisible: true,
-            title: 'ELITE LEVEL',
-          });
-          eliteLines.push(line);
-        }
-
-
-        // [MODIFIED: ADD LINE] إضافة خط جديد
-        function addPriceLine() {
-          const data = candleSeries.data();
-          if (data.length === 0) return;
-          const currentPrice = data[data.length - 1].close;
-
-          createInteractiveLine(currentPrice);
-          savedPrices.push(currentPrice);
-          updateStorage();
-        }
-
-        // [NEW: MOVE & DELETE LOGIC]
-        // إضافة مستمع للأحداث فوق حاوية الشارت
-        const chartContainer = document.getElementById('chart');
-
-        // تتبع النقرات المزدوجة للحذف
-        chartContainer.addEventListener('dblclick', (e) => {
-          const price = chart.priceScale('right').coordinateToPrice(e.offsetY);
-          // البحث عن أقرب خط للنقرة وحذفه
-          const threshold = 2; // مدى الحساسية للحذف
-          const lineIndex = savedPrices.findIndex(p => Math.abs(p - price) < threshold);
+// [FIXED: FIND NEAREST LINE]
+function findNearestLine(price) {
+    if (eliteLines.length === 0) return -1;
     
-          if (lineIndex !== -1) {
-            candleSeries.removePriceLine(eliteLines[lineIndex]);
-            eliteLines.splice(lineIndex, 1);
-            savedPrices.splice(lineIndex, 1);
-            updateStorage();
-          }
+    let nearestIndex = -1;
+    let minDiff = Infinity;
+    
+    eliteLines.forEach((line, index) => {
+        const linePrice = line.options().price;
+        const diff = Math.abs(linePrice - price);
+        
+        if (diff < minDiff) {
+            minDiff = diff;
+            nearestIndex = index;
+        }
+    });
+    
+    // إذا كان الفرق ضمن مدى معقول (0.5% من السعر)
+    const threshold = price * 0.005;
+    return minDiff <= threshold ? nearestIndex : -1;
+}
+
+// [FIXED: CLEAR ALL] دالة مسح الكل
+function clearAllDrawings() {
+    if(confirm("هل تريد مسح جميع الرسوم؟")) {
+        // مسح من الشارت
+        eliteLines.forEach(line => {
+            try {
+                candleSeries.removePriceLine(line);
+            } catch(e) { /* ignore */ }
         });
+        
+        // مسح من الذاكرة
+        eliteLines = [];
+        savedPrices = [];
+        
+        // مسح من التخزين
+        localStorage.removeItem('elite_drawings');
+    }
+}
 
-        // تتبع النقر للتحريك (تبسيطاً سنعتمد النقر المطول أو السحب في التحديث القادم)
-        function updateStorage() {
-          localStorage.setItem('elite_drawings', JSON.stringify(savedPrices));
+// [FIXED: COUNTDOWN]
+function setupCountdown(interval) {
+    if (countdownTimer) clearInterval(countdownTimer);
+    
+    const intervalMap = {
+        '1m': 1,
+        '5m': 5,
+        '15m': 15,
+        '1h': 60,
+        '4h': 240,
+        '1d': 1440
+    };
+    
+    const minutes = intervalMap[interval] || 15;
+    const intervalMs = minutes * 60 * 1000;
+    
+    function updateCountdown() {
+        const now = new Date().getTime();
+        const timeLeft = intervalMs - (now % intervalMs);
+        const m = Math.floor(timeLeft / 60000);
+        const s = Math.floor((timeLeft % 60000) / 1000);
+        document.getElementById('countdown').innerText = 
+            `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    
+    updateCountdown(); // تحديث فوري
+    countdownTimer = setInterval(updateCountdown, 1000);
+}
+
+// [FIXED: UPDATE CHART DATA]
+async function updateChartData(interval) {
+    try {
+        const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=${interval}&limit=500`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
+        
+        const rawData = await response.json();
+        const data = rawData.map(d => ({
+            time: d[0] / 1000,
+            open: parseFloat(d[1]),
+            high: parseFloat(d[2]),
+            low: parseFloat(d[3]),
+            close: parseFloat(d[4])
+        }));
+        
+        candleSeries.setData(data);
+        setupCountdown(interval);
+        connectSocket(interval);
+        
+        // إعادة تحميل الخطوط بعد فترة بسيطة لضمان تحميل البيانات أولاً
+        setTimeout(() => {
+            loadSavedLines();
+        }, 100);
+        
+    } catch (e) {
+        console.error('Error fetching chart data:', e);
+        // يمكن إضافة رسالة للمستخدم هنا
+    }
+}
 
-        // [FIXED: CLEAR ALL] إصلاح دالة مسح الكل
-        function clearAllDrawings() {
-          if(confirm("هل تريد مسح جميع الرسوم؟")) {
-            savedPrices = [];
-            eliteLines.forEach(l => candleSeries.removePriceLine(l));
-            eliteLines = [];
-            localStorage.removeItem('elite_drawings');
-            // لا داعي لإعادة تحميل الصفحة كاملة الآن، الشارت سيصبح نظيفاً فوراً
-          }
+// [FIXED: EVENT HANDLERS]
+function changeTf(tf, btn) {
+    currentInterval = tf;
+    document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateChartData(tf);
+}
+
+// تهيئة الأحداث
+function initEvents() {
+    const chartContainer = document.getElementById('chart');
+    
+    // حدث النقر المزدوج للحذف
+    chartContainer.addEventListener('dblclick', (e) => {
+        const rect = chartContainer.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        
+        // تحويل الإحداثيات إلى سعر
+        const priceScale = chart.priceScale('right');
+        const price = priceScale.coordinateToPrice(y);
+        
+        // البحث عن أقرب خط
+        const lineIndex = findNearestLine(price);
+        
+        if (lineIndex !== -1) {
+            try {
+                // حذف الخط من الشارت
+                candleSeries.removePriceLine(eliteLines[lineIndex]);
+                // حذف من المصفوفة
+                eliteLines.splice(lineIndex, 1);
+                // تحديث التخزين
+                updateStorage();
+            } catch (error) {
+                console.error('Error removing line:', error);
+            }
         }
+    });
+}
 
-        function setupCountdown(interval) {
-            if (countdownTimer) clearInterval(countdownTimer);
-            const minutes = parseInt(interval);
-            const intervalMs = minutes * 60 * 1000;
-            countdownTimer = setInterval(() => {
-                const now = new Date().getTime();
-                const timeLeft = intervalMs - (now % intervalMs);
-                const m = Math.floor(timeLeft / 60000);
-                const s = Math.floor((timeLeft % 60000) / 1000);
-                document.getElementById('countdown').innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-            }, 1000);
-        }
+// تهيئة التطبيق
+updateChartData(currentInterval);
+initEvents();
 
-        function changeTf(tf, btn) {
-            currentInterval = tf;
-            document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            updateChartData(tf);
-        }
-
-        updateChartData(currentInterval);
-        updateChartData(tf);
-        window.onresize = () => chart.applyOptions({ width: window.innerWidth, height: window.innerHeight });
+// [FIXED: RESIZE HANDLER]
+window.addEventListener('resize', () => {
+    chart.applyOptions({
+        width: window.innerWidth,
+        height: window.innerHeight
+    });
+});
     </script>
 </body>
 </html>
