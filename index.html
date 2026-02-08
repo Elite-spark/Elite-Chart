@@ -11,36 +11,122 @@
         
         /* تنسيق الهوية البصرية */
         .brand-container {
-            position: absolute; top: 20px; left: 20px; z-index: 10;
+            position: absolute; top: 15px; left: 20px; z-index: 10;
             color: #FFD700; pointer-events: none;
             display: flex; flex-direction: column; align-items: center;
         }
         .brand-container h1 { margin: 0; font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
-        .brand-container p { margin: 2px 0; font-size: 12px; opacity: 0.8; }
+        .brand-container p { margin: 2px 0; padding: 2px 5px; font-size: 12px; opacity: 0.8; border: 1px solid #FFD700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); background: rgba(0,0,0,0.8); border-radius: 4px; cursor: pointer; }
         .user-logo { width: 45px; height: 45px; margin-top: 8px; border: 0px solid #FFD700; border-radius: 1px; }
 
         #countdown-box {
-            position: absolute; top: 20px; right: 80px; z-index: 10;
             display: flex; flex-direction: column; align-items: center;
             background: rgba(20, 20, 20, 0.8); border: 1px solid #FFD700;
-            padding: 5px 12px; border-radius: 8px; min-width: 60px;
+            padding: 5px 12px; border-radius: 8px; width: 60px;
         }
         #countdown-label { color: #FFD700; font-size: 9px; text-transform: uppercase; margin-bottom: 2px; }
         #countdown { color: #FFD700; font-weight: bold; font-size: 16px; font-family: 'Courier New', monospace; }
 
-        .timeframes {
-            position: absolute; bottom: 30px; left: 20px;
-            z-index: 20; display: flex; gap: 10px;
+        .Bar {
+            position: absolute;
+            top: 15px;
+            right: 5px;
+            z-index: 10;
+            gap: 10px;
+            background: #000;
+            border: 0px solid #FFD700;
+            padding: 5px;
+            border-radius: 8px;
+            min-width: 120px;
+            display: flex; 
+            flex-direction: row; 
+            align-items: center;
         }
-        .tf-btn {
-            background: #000; border: 1px solid #FFD700; color: #FFD700;
-            padding: 6px 15px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: 0.3s;
-        }
-        .tf-btn.active { background: #FFD700; color: #000; font-weight: bold; }
 
-        /* [NEW: UI] أزرار التحكم بالرسم */
+        /* معلومات السعر الحي */
+        .price-info {
+            background: rgba(20, 20, 20, 0.9);
+            border: 1px solid #FFD700;
+            padding: 5px 12px;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+            width: 120px;
+        }
+        .current-price {
+            color: #FFD700;
+            font-size: 16px;
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+        }
+        .price-change {
+            font-size: 9px;
+            margin-top: 2px;
+        }
+        .price-change.positive { color: #26a69a; }
+        .price-change.negative { color: #ef5350; }
+
+        /* زر الفريمات الرئيسي */
+        .timeframe-main-btn {
+            position: absolute; 
+            bottom: 30px; 
+            left: 10px;
+            z-index: 20;
+            background: rgba(20, 20, 20, 0.9); 
+            border: 1px solid #FFD700; 
+            color: #FFD700;
+            padding: 6px 12px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-size: 11px; 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+            font-weight: 600;
+            min-width: 60px;
+        }
+
+        /* قائمة الفريمات المخفية */
+        .timeframes-menu {
+            position: absolute;
+            bottom: 70px;
+            left: 10px;
+            z-index: 20;
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+            background: rgba(20, 20, 20, 0.95);
+            border: 1px solid #FFD700;
+            padding: 10px;
+            border-radius: 6px;
+            min-width: 60px;
+        }
+
+        .tf-btn {
+            background: rgba(20, 20, 20, 0.9); 
+            border: 1px solid #FFD700; 
+            color: #FFD700;
+            padding: 6px 12px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-size: 11px; 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+            font-weight: 600; 
+            min-width: 40px;
+            text-align: center;
+        }
+        
+        .tf-btn.active { 
+            background: #FFD700; 
+            color: #000; 
+            font-weight: bold; 
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.5); 
+        }
+
+        .tf-btn:hover {
+            background: rgba(255, 215, 0, 0.1);
+            transform: translateY(-1px);
+        }
+
+        /* أزرار التحكم بالرسم */
         .drawing-controls {
-            position: absolute; top: 22px; right: 180px; z-index: 20;
             display: flex; flex-direction: row; gap: 10px;
         }
         .draw-btn {
@@ -51,11 +137,25 @@
     </style>
 </head>
 <body>
-    
+
+  <div class="Bar">  
+
+    <div class="drawing-controls">
+        <button class="draw-btn" title="رسم خط أفقي" onclick="addPriceLine()">➕</button>
+        <button class="draw-btn" style="color:red" title="مسح الكل" onclick="clearAllDrawings()">🗑️</button>
+    </div>
+
     <div id="countdown-box">
         <div id="countdown-label">Next Candle</div>
         <div id="countdown">00:00</div>
     </div>
+
+    <div class="price-info">
+        <div class="current-price" id="currentPrice">--</div>
+        <div class="price-change" id="priceChange">--</div>
+    </div>
+
+  </div>
     
     <div class="brand-container">
         <h1>ELITE SPARK</h1>
@@ -63,23 +163,29 @@
         <img src="https://i.ibb.co/R4kwHrMc/image.png" class="user-logo" alt="Logo">
     </div>
 
-    <div class="drawing-controls">
-        <button class="draw-btn" title="رسم خط أفقي" onclick="addPriceLine()">➕</button>
-        <button class="draw-btn" style="color:red" title="مسح الكل" onclick="clearAllDrawings()">🗑️</button>
-    </div>
-
-    <div class="timeframes">
-        <button class="tf-btn" onclick="changeTf('1m', this)">1M</button>
+    <!-- زر الفريمات الرئيسي -->
+    <button class="timeframe-main-btn" id="timeframeMainBtn" onclick="toggleTimeframesMenu()">1M ▼</button>
+    
+    <!-- قائمة الفريمات المخفية -->
+    <div class="timeframes-menu" id="timeframesMenu">
+        <button class="tf-btn active" onclick="changeTf('1m', this)">1M</button>
         <button class="tf-btn" onclick="changeTf('5m', this)">5M</button>
-        <button class="tf-btn active" onclick="changeTf('15m', this)">15M</button>
+        <button class="tf-btn" onclick="changeTf('15m', this)">15M</button>
+        <button class="tf-btn" onclick="changeTf('30m', this)">30M</button>
+        <button class="tf-btn" onclick="changeTf('1h', this)">1H</button>
+        <button class="tf-btn" onclick="changeTf('4h', this)">4H</button>
+        <button class="tf-btn" onclick="changeTf('1d', this)">1D</button>
     </div>
 
     <div id="chart"></div>
 
     <script>
-let currentInterval = '15m';
+let currentInterval = '1m';
 let countdownTimer;
 let socket = null;
+let lastPrice = null;
+let priceChange = 0;
+let wsPrice = null;
 
 const chart = LightweightCharts.createChart(document.getElementById('chart'), {
     layout: { background: { color: '#000000' }, textColor: '#FFD700' },
@@ -97,6 +203,22 @@ const candleSeries = chart.addCandlestickSeries({
     upColor: '#FFD700', downColor: '#000',
     borderUpColor: '#FFD700', borderDownColor: '#FFD700',
     wickUpColor: '#FFD700', wickDownColor: '#FFD700'
+});
+
+// وظيفة تبديل عرض قائمة الفريمات
+function toggleTimeframesMenu() {
+    const menu = document.getElementById('timeframesMenu');
+    menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+}
+
+// إغلاق القائمة عند النقر خارجها
+document.addEventListener('click', function(event) {
+    const menu = document.getElementById('timeframesMenu');
+    const mainBtn = document.getElementById('timeframeMainBtn');
+    
+    if (!menu.contains(event.target) && !mainBtn.contains(event.target)) {
+        menu.style.display = 'none';
+    }
 });
 
 // [FIXED: ENHANCED DRAWING SYSTEM]
@@ -198,6 +320,10 @@ async function updateChartData(interval) {
     try {
         console.log('Fetching data for interval:', interval);
         
+        // تحديث زر الفريم الرئيسي
+        document.getElementById('timeframeMainBtn').textContent = 
+            interval.toUpperCase() + ' ▼';
+        
         // محاولة متعددة لتحسين العمل على Android
         let success = false;
         let attempts = 0;
@@ -217,6 +343,12 @@ async function updateChartData(interval) {
                         close: parseFloat(d[4])
                     }));
                     success = true;
+                    
+                    // تحديث السعر الأخير
+                    if (data.length > 0) {
+                        lastPrice = data[data.length - 1].close;
+                        updatePriceDisplay();
+                    }
                 }
             } catch (fetchError) {
                 console.log(`Attempt ${attempts + 1} failed, retrying...`);
@@ -252,6 +384,34 @@ async function updateChartData(interval) {
                 'جاري تحميل البيانات...<br>' +
                 '<button onclick="retryConnection()" style="margin-top:20px; padding:10px 20px; background:#FFD700; color:#000; border:none; border-radius:5px;">إعادة المحاولة</button>' +
                 '</div>';
+        }
+    }
+}
+
+// [FIXED: PRICE DISPLAY FUNCTION]
+function updatePriceDisplay() {
+    if (lastPrice !== null) {
+        const priceElement = document.getElementById('currentPrice');
+        const changeElement = document.getElementById('priceChange');
+        
+        // تحديث السعر
+        priceElement.textContent = lastPrice.toFixed(2);
+        
+        // إذا كان هناك سعر من WebSocket، استخدمه
+        if (wsPrice !== null) {
+            priceElement.textContent = wsPrice.toFixed(2);
+        }
+        
+        // حساب التغير (باستخدام بيانات أول شمعة كمقارنة)
+        const data = candleSeries.data();
+        if (data && data.length > 1) {
+            const firstPrice = data[0].close;
+            const currentPrice = wsPrice !== null ? wsPrice : lastPrice;
+            const change = ((currentPrice - firstPrice) / firstPrice) * 100;
+            priceChange = change;
+            
+            changeElement.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+            changeElement.className = `price-change ${change >= 0 ? 'positive' : 'negative'}`;
         }
     }
 }
@@ -507,7 +667,7 @@ function clearAllDrawings() {
     }
 }
 
-// [FIXED: SOCKET CONNECTION]
+// [FIXED: SOCKET CONNECTION WITH LIVE PRICE]
 function connectSocket(interval) {
     if (socket) {
         socket.close();
@@ -521,6 +681,7 @@ function connectSocket(interval) {
             const msg = JSON.parse(event.data);
             const k = msg.k;
             
+            // تحديث الشمعة
             candleSeries.update({
                 time: k.t / 1000,
                 open: parseFloat(k.o),
@@ -528,29 +689,114 @@ function connectSocket(interval) {
                 low: parseFloat(k.l),
                 close: parseFloat(k.c),
             });
+            
+            // تحديث السعر الحي
+            wsPrice = parseFloat(k.c);
+            updatePriceDisplay();
         };
+        
+        socket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+        
     } catch (error) {
-        console.error('WebSocket error:', error);
+        console.error('WebSocket connection error:', error);
     }
 }
 
-// [FIXED: COUNTDOWN]
+// [FIXED: COUNTDOWN FUNCTION FOR ALL TIMEFRAMES]
 function setupCountdown(interval) {
     if (countdownTimer) clearInterval(countdownTimer);
     
-    const intervalMap = { '1m': 1, '5m': 5, '15m': 15 };
-    const minutes = intervalMap[interval] || 15;
-    const intervalMs = minutes * 60 * 1000;
-    
     function updateCountdown() {
-        const now = Date.now();
-        const timeLeft = intervalMs - (now % intervalMs);
-        const m = Math.floor(timeLeft / 60000);
-        const s = Math.floor((timeLeft % 60000) / 1000);
-        document.getElementById('countdown').innerText = 
-            `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        const now = new Date();
+        let nextCandleTime;
+        
+        // حساب وقت الشمعة التالية بناءً على الفريم
+        switch(interval) {
+            case '1m':
+                nextCandleTime = new Date(now);
+                nextCandleTime.setMinutes(nextCandleTime.getMinutes() + 1);
+                nextCandleTime.setSeconds(0);
+                nextCandleTime.setMilliseconds(0);
+                break;
+                
+            case '5m':
+                nextCandleTime = new Date(now);
+                let minutes = nextCandleTime.getMinutes();
+                let remainder = minutes % 5;
+                nextCandleTime.setMinutes(minutes + (5 - remainder));
+                nextCandleTime.setSeconds(0);
+                nextCandleTime.setMilliseconds(0);
+                break;
+                
+            case '15m':
+                nextCandleTime = new Date(now);
+                minutes = nextCandleTime.getMinutes();
+                remainder = minutes % 15;
+                nextCandleTime.setMinutes(minutes + (15 - remainder));
+                nextCandleTime.setSeconds(0);
+                nextCandleTime.setMilliseconds(0);
+                break;
+                
+            case '30m':
+                nextCandleTime = new Date(now);
+                minutes = nextCandleTime.getMinutes();
+                remainder = minutes % 30;
+                nextCandleTime.setMinutes(minutes + (30 - remainder));
+                nextCandleTime.setSeconds(0);
+                nextCandleTime.setMilliseconds(0);
+                break;
+                
+            case '1h':
+                nextCandleTime = new Date(now);
+                nextCandleTime.setHours(nextCandleTime.getHours() + 1);
+                nextCandleTime.setMinutes(0);
+                nextCandleTime.setSeconds(0);
+                nextCandleTime.setMilliseconds(0);
+                break;
+                
+            case '4h':
+                nextCandleTime = new Date(now);
+                let hours = nextCandleTime.getHours();
+                remainder = hours % 4;
+                nextCandleTime.setHours(hours + (4 - remainder));
+                nextCandleTime.setMinutes(0);
+                nextCandleTime.setSeconds(0);
+                nextCandleTime.setMilliseconds(0);
+                break;
+                
+            case '1d':
+                nextCandleTime = new Date(now);
+                nextCandleTime.setDate(nextCandleTime.getDate() + 1);
+                nextCandleTime.setHours(0);
+                nextCandleTime.setMinutes(0);
+                nextCandleTime.setSeconds(0);
+                nextCandleTime.setMilliseconds(0);
+                break;
+                
+            default:
+                nextCandleTime = new Date(now.getTime() + 60000);
+        }
+        
+        const timeLeft = nextCandleTime.getTime() - now.getTime();
+        
+        if (timeLeft > 0) {
+            const hoursLeft = Math.floor(timeLeft / 3600000);
+            const minutesLeft = Math.floor((timeLeft % 3600000) / 60000);
+            const secondsLeft = Math.floor((timeLeft % 60000) / 1000);
+            
+            let countdownText;
+            if (hoursLeft > 0) {
+                countdownText = `${hoursLeft.toString().padStart(2, '0')}:${minutesLeft.toString().padStart(2, '0')}:${secondsLeft.toString().padStart(2, '0')}`;
+            } else {
+                countdownText = `${minutesLeft.toString().padStart(2, '0')}:${secondsLeft.toString().padStart(2, '0')}`;
+            }
+            
+            document.getElementById('countdown').innerText = countdownText;
+        }
     }
-    
+
     updateCountdown();
     countdownTimer = setInterval(updateCountdown, 1000);
 }
@@ -558,13 +804,20 @@ function setupCountdown(interval) {
 // [FIXED: CHANGE TIMEFRAME]
 function changeTf(tf, btn) {
     currentInterval = tf;
+    
+    // تحديث الأزرار النشطة
     document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    
+    // تحديث الزر الرئيسي
+    document.getElementById('timeframeMainBtn').textContent = tf.toUpperCase() + ' ▼';
+    
+    // إغلاق القائمة
+    document.getElementById('timeframesMenu').style.display = 'none';
+    
+    // تحديث البيانات
     updateChartData(tf);
 }
-
-  //updateChartData(interval);
- // updateChartData(currentInterval);
 
 // [INITIALIZATION]
 document.addEventListener('DOMContentLoaded', function() {
@@ -575,8 +828,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // إعداد أحداث الحذف
     setupLineDeletion();
-
-    updateChartData(currentInterval);
     
     // إعداد أحداث النافذة
     window.addEventListener('resize', () => {
@@ -585,6 +836,9 @@ document.addEventListener('DOMContentLoaded', function() {
             height: window.innerHeight
         });
     });
+    
+    // تحديث السعر كل ثانية (كحماية إضافية)
+    setInterval(updatePriceDisplay, 1000);
     
     // إضافة CSS للإشعارات
     const style = document.createElement('style');
